@@ -1,0 +1,40 @@
+# PokerMind: LoRA-Tuned LLM for Texas Hold'em Poker
+# Python package requirements for the CS6220 project
+
+# Core ML/DL Frameworks
+torch>=2.0.0
+transformers>=4.30.0
+datasets>=2.12.0
+accelerate>=0.20.0
+
+# LoRA and Quantization
+peft>=0.4.0
+bitsandbytes>=0.39.0
+
+# Data Science and Analysis
+numpy>=1.24.0
+pandas>=2.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+scikit-learn>=1.3.0
+
+# Jupyter and Interactive Computing
+jupyter>=1.0.0
+notebook>=6.5.0
+ipykernel>=6.23.0
+ipywidgets>=8.0.0
+
+# Progress Tracking and Utilities
+tqdm>=4.65.0
+packaging>=23.0
+
+# Optional: For enhanced functionality
+# scipy>=1.10.0        # Scientific computing
+# plotly>=5.14.0       # Interactive plotting
+# wandb>=0.15.0        # Experiment tracking (if needed)
+# tensorboard>=2.13.0  # TensorBoard logging (if needed)
+
+# Development and Code Quality (Optional)
+# black>=23.0.0        # Code formatting
+# flake8>=6.0.0        # Linting
+# pytest>=7.4.0       # Testing
