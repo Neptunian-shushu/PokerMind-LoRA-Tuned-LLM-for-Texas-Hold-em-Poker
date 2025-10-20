@@ -17,9 +17,16 @@ venv/
 logs/
 *.log
 
-# Model artifacts
+# Model artifacts (ignore heavy files but keep LoRA adapters & tokenizer)
 poker-lora-model/
 models/
+# Keep LoRA adapter and tokenizer files tracked; ignore everything else under poker-lora-model
+!poker-lora-model/Meta-Llama-3-8B/adapter_model.safetensors
+!poker-lora-model/Meta-Llama-3-8B/adapter_config.json
+!poker-lora-model/Meta-Llama-3-8B/tokenizer.json
+!poker-lora-model/Meta-Llama-3-8B/tokenizer_config.json
+!poker-lora-model/Meta-Llama-3-8B/special_tokens_map.json
+!poker-lora-model/Meta-Llama-3-8B/tokenizer.model
 *.safetensors
 *.pt
 *.bin
