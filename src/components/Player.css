@@ -1,0 +1,117 @@
+.player {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.8);
+  border: 2px solid rgba(51, 65, 85, 0.8);
+  transition: all 0.3s;
+  min-width: 180px;
+}
+
+.player.active {
+  border-color: #10b981;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+  background: rgba(30, 41, 59, 0.95);
+}
+
+.player-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.player-name {
+  font-weight: 600;
+  color: #f1f5f9;
+  font-size: 16px;
+}
+
+.player-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #fbbf24;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.chip-icon {
+  font-size: 16px;
+}
+
+.player-cards {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.player-bet {
+  position: absolute;
+  top: -15px;
+  right: -15px;
+  background: linear-gradient(135deg, #dc2626, #991b1b);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+}
+
+.player-action {
+  position: absolute;
+  bottom: -12px;
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+  text-transform: uppercase;
+}
+
+.dealer-button {
+  position: absolute;
+  top: -12px;
+  left: -12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 14px;
+  border: 2px solid white;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.5);
+}
+
+/* Position-specific styles */
+.player-bottom {
+  grid-area: bottom;
+}
+
+.player-left {
+  grid-area: left;
+}
+
+.player-top {
+  grid-area: top;
+}
+
+.player-right {
+  grid-area: right;
+}
+

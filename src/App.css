@@ -1,42 +1,153 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+* {
+  box-sizing: border-box;
+}
+
+.app {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  padding: 24px 32px;
   text-align: center;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0) 100%);
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+.app-title {
+  font-size: 36px;
+  font-weight: 800;
+  margin: 0 0 8px 0;
+  background: linear-gradient(135deg, #10b981 0%, #3b82f6 50%, #8b5cf6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 1px;
 }
 
-@keyframes logo-spin {
+.app-subtitle {
+  font-size: 14px;
+  color: #94a3b8;
+  margin: 0;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px;
+  max-width: 1600px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.poker-section {
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 20px;
+  padding: 20px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.control-section {
+  width: 100%;
+}
+
+.app-footer {
+  padding: 20px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+  border-top: 1px solid rgba(51, 65, 85, 0.5);
+  background: linear-gradient(0deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0) 100%);
+}
+
+/* Desktop layout - side by side */
+@media (min-width: 1200px) {
+  .app-main {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .poker-section {
+    flex: 1.2;
+  }
+
+  .control-section {
+    flex: 0.8;
+    min-width: 400px;
+  }
+}
+
+/* Tablet layout */
+@media (max-width: 1199px) and (min-width: 768px) {
+  .app-main {
+    flex-direction: column;
+  }
+
+  .poker-section {
+    min-height: 500px;
+  }
+}
+
+/* Mobile layout */
+@media (max-width: 767px) {
+  .app {
+    min-height: 100vh;
+  }
+
+  .app-header {
+    padding: 16px 20px;
+  }
+
+  .app-title {
+    font-size: 28px;
+  }
+
+  .app-subtitle {
+    font-size: 12px;
+  }
+
+  .app-main {
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .poker-section {
+    padding: 12px;
+    min-height: 400px;
+  }
+
+  .app-footer {
+    font-size: 11px;
+    padding: 16px;
+  }
+}
+
+/* Animations */
+@keyframes fadeIn {
   from {
-    transform: rotate(0deg);
+    opacity: 0;
+    transform: translateY(20px);
   }
   to {
-    transform: rotate(360deg);
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.poker-section,
+.control-section {
+  animation: fadeIn 0.6s ease-out;
 }
 
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
+.control-section {
+  animation-delay: 0.2s;
+  animation-fill-mode: backwards;
 }
