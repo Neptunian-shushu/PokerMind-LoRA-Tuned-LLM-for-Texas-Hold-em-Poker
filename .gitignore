@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Jupyter
+.ipynb_checkpoints
+
+# Environment
+.env
+.venv
+env/
+venv/
+.conda/
+
+# Logs
+logs/
+*.log
+
+# Model artifacts
+poker-lora-model/
+models/
+*.safetensors
+*.pt
+*.bin
+
+# HuggingFace caches
+/home/hice1/bshu30/.cache/huggingface
+
+# OS files
+.DS_Store
+*.swp
+
+# Checkpoints and temp
+**/checkpoint-*/
+**/optimizer.pt
+**/scheduler.pt
+**/scaler.pt
+**/rng_state.pth
+
+# Large files
+*.tar.gz
+*.tgz
+
+# VSCode
+.vscode/
