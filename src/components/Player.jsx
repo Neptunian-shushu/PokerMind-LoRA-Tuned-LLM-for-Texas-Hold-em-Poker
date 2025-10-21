@@ -9,10 +9,11 @@ const Player = ({
   position = 'bottom',
   bet = 0,
   action = '',
-  isDealer = false
+  isDealer = false,
+  isFolded = false
 }) => {
   return (
-    <div className={`player player-${position} ${isActive ? 'active' : ''}`}>
+    <div className={`player player-${position} ${isActive ? 'active' : ''} ${isFolded ? 'folded' : ''}`}>
       {isDealer && <div className="dealer-button">D</div>}
       
       <div className="player-info">

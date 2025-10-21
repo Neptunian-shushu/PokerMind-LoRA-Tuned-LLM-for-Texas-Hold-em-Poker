@@ -1,9 +1,9 @@
 .card {
-  width: 70px;
-  height: 100px;
-  border-radius: 8px;
+  width: 42px;
+  height: 60px;
+  border-radius: 5px;
   background: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   position: relative;
   display: flex;
   align-items: center;
@@ -11,7 +11,7 @@
   font-family: Arial, sans-serif;
   font-weight: bold;
   transition: transform 0.2s;
-  margin: 0 4px;
+  margin: 0 2px;
 }
 
 .card:hover {
@@ -49,31 +49,31 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  font-size: 14px;
+  font-size: 9px;
   line-height: 1;
 }
 
 .card-corner.top-left {
-  top: 6px;
-  left: 6px;
+  top: 3px;
+  left: 3px;
 }
 
 .card-corner.bottom-right {
-  bottom: 6px;
-  right: 6px;
+  bottom: 3px;
+  right: 3px;
   transform: rotate(180deg);
 }
 
 .card-center {
-  font-size: 36px;
+  font-size: 20px;
 }
 
 .rank {
-  font-size: 16px;
-  margin-bottom: 2px;
+  font-size: 11px;
+  margin-bottom: 1px;
 }
 
 .suit {
-  font-size: 14px;
+  font-size: 9px;
 }
 

@@ -3,7 +3,7 @@ import Card from './Card';
 import Player from './Player';
 import './PokerTable.css';
 
-const PokerTable = ({ players, communityCards, pot }) => {
+const PokerTable = ({ players, communityCards, pot, currentPlayerIndex }) => {
   return (
     <div className="poker-table-container">
       <div className="poker-table">
@@ -27,13 +27,9 @@ const PokerTable = ({ players, communityCards, pot }) => {
                 />
               ))
             ) : (
-              <>
-                <Card faceDown={true} />
-                <Card faceDown={true} />
-                <Card faceDown={true} />
-                <Card faceDown={true} />
-                <Card faceDown={true} />
-              </>
+              <div style={{ color: '#888', fontSize: '14px', padding: '20px' }}>
+                Preflop - No community cards yet
+              </div>
             )}
           </div>
         </div>
@@ -46,11 +42,12 @@ const PokerTable = ({ players, communityCards, pot }) => {
               name={player.name}
               chips={player.chips}
               cards={player.cards}
-              isActive={player.isActive}
+              isActive={index === currentPlayerIndex}
               position={player.position}
               bet={player.bet}
               action={player.action}
               isDealer={player.isDealer}
+              isFolded={player.isFolded}
             />
           ))}
         </div>
