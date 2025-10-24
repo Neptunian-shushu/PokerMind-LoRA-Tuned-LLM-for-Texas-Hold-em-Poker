@@ -183,7 +183,7 @@ def main():
         per_device_train_batch_size=16,   # 16 samples per GPU per step
         per_device_eval_batch_size=32,    # Larger batch for evaluation (no gradients)
         gradient_accumulation_steps=8,    # Effective batch size = 16 * 8 = 128
-        learning_rate=1e-6,
+        learning_rate=2e-4,
         warmup_steps=100,                 # ~8% of total steps (99k/128 = 773 steps)
         lr_scheduler_type="cosine",
         dataloader_num_workers=4,         # More workers for faster data loading
