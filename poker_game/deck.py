@@ -31,8 +31,8 @@ class Rank(Enum):
     KING = (13, 'King')
     ACE = (14, 'Ace')
     
-    def __init__(self, value, symbol):
-        self.value = value
+    def __init__(self, numeric_value, symbol):
+        self.numeric_value = numeric_value
         self.symbol = symbol
 
 
@@ -128,6 +128,8 @@ class Deck:
             for suit in Suit
             for rank in Rank
         ]
+        if self.seed is not None:
+            random.seed(self.seed)
         self.shuffle()
     
     def shuffle(self):

@@ -5,6 +5,7 @@ Complete implementation for PPO training and demo interface
 
 from typing import List, Tuple, Optional, Dict
 import random
+import time
 from .deck import Deck, Card
 from .game_state import GameState, PlayerState, Action, BettingRound
 from .hand_evaluator import HandEvaluator
@@ -29,7 +30,7 @@ class PokerGame:
             starting_stack: Starting chip count for each player
             small_blind: Small blind amount
             big_blind: Big blind amount
-            seed: Random seed for reproducibility
+            seed: Random seed for reproducibility (None for time-based seed)
         """
         if num_players < 2 or num_players > 10:
             raise ValueError("Number of players must be between 2 and 10")
@@ -38,6 +39,11 @@ class PokerGame:
         self.starting_stack = starting_stack
         self.small_blind = small_blind
         self.big_blind = big_blind
+        
+        # Set seed based on current time if None
+        if seed is None:
+            seed = int(time.time() * 1000000)  # Microsecond precision for uniqueness
+        
         self.seed = seed
         
         # Initialize players
@@ -45,7 +51,7 @@ class PokerGame:
             PlayerState(
                 player_id=i,
                 stack=starting_stack,
-                position=self._get_position_name(i, num_players)
+                position=f"P{i}"  # Temporary position, will be updated in reset
             )
             for i in range(num_players)
         ]
@@ -55,26 +61,50 @@ class PokerGame:
             players=self.players,
             small_blind=small_blind,
             big_blind=big_blind,
-            button_position=0
+            button_position=0,
+            starting_stack=starting_stack
         )
         
         self.deck = Deck(seed=seed)
         self.hand_evaluator = HandEvaluator()
         
     def _get_position_name(self, idx: int, num_players: int) -> str:
-        """Get position name for player"""
+        """Get position name relative to button"""
         if num_players == 2:
-            return "BTN/SB" if idx == 0 else "BB"
+            # In heads-up: button is SB, other is BB
+            return "SB" if idx == self.state.button_position else "BB"
         else:
-            positions = ["BTN", "SB", "BB"] + [f"MP{i}" for i in range(num_players - 3)]
-            return positions[idx] if idx < len(positions) else f"P{idx}"
+            # Calculate position relative to button
+            relative_pos = (idx - self.state.button_position) % num_players
+            
+            if relative_pos == 0:
+                return "BTN"
+            elif relative_pos == 1:
+                return "SB"  
+            elif relative_pos == 2:
+                return "BB"
+            elif num_players == 3:
+                return "BTN"  # In 3-handed, button acts first
+            else:
+                # For 4+ players
+                if num_players == 6:
+                    if relative_pos == 3:
+                        return "UTG"
+                    elif relative_pos == 4:
+                        return "HJ"
+                    elif relative_pos == 5:
+                        return "CO"
+                    else:
+                        return f"MP{relative_pos - 2}"
+                elif relative_pos == 3:
+                    return "UTG"
+                elif relative_pos == num_players - 1:
+                    return "CO"
+                else:
+                    return f"MP{relative_pos - 2}"
     
     def reset(self) -> GameState:
         """Start a new hand"""
-        # Move button
-        self.state.hand_number += 1
-        self.state.button_position = (self.state.button_position + 1) % self.num_players
-        
         # Reset deck
         self.deck.reset()
         
@@ -94,16 +124,25 @@ class PokerGame:
         self.state.betting_round = BettingRound.PREFLOP
         self.state.action_history = []
         
+        # Move button for next hand
+        self.state.hand_number += 1
+        self.state.button_position = (self.state.button_position + 1) % self.num_players
+        
+        # Update player positions based on new button
+        for i, player in enumerate(self.players):
+            player.position = self._get_position_name(i, self.num_players)
+        
+        # Set first player to act
+        if self.num_players == 2:
+            self.state.current_player_idx = self.state.button_position  # SB acts first
+        else:
+            self.state.current_player_idx = (self.state.button_position + 3) % self.num_players  # UTG acts first
+        
         # Post blinds
         self._post_blinds()
         
         # Deal hole cards
         self._deal_hole_cards()
-        
-        # Set first player to act (after big blind)
-        self.state.current_player_idx = (self.state.button_position + 3) % self.num_players
-        if self.num_players == 2:
-            self.state.current_player_idx = self.state.button_position
         
         # Find first player who can act
         while not self.players[self.state.current_player_idx].can_act():
@@ -125,14 +164,14 @@ class PokerGame:
         sb_player = self.players[sb_idx]
         sb_amount = sb_player.bet(self.small_blind)
         self.state.add_to_pot(sb_amount)
-        self.state.record_action(sb_player.player_id, Action.BET, sb_amount)
+        self.state.record_action(sb_player.player_id, Action.BET, sb_amount, is_blind=True)
         
         # Big blind
         bb_player = self.players[bb_idx]
         bb_amount = bb_player.bet(self.big_blind)
         self.state.add_to_pot(bb_amount)
         self.state.current_bet = bb_amount
-        self.state.record_action(bb_player.player_id, Action.BET, bb_amount)
+        self.state.record_action(bb_player.player_id, Action.BET, bb_amount, is_blind=True)
     
     def _deal_hole_cards(self):
         """Deal 2 cards to each active player"""
@@ -345,7 +384,7 @@ class PokerGame:
             lines.append("Board: (no cards yet)")
         
         # Pot
-        lines.append(f"Pot: ${self.state.pot:.0f}")
+        lines.append(f"Pot: ${self.state.pot:.1f}")
         
         # Players
         lines.append("\nPlayers:")
@@ -360,12 +399,12 @@ class PokerGame:
                 if player.hole_cards:
                     cards_str = f" [{player.hole_cards[0]} {player.hole_cards[1]}]"
             
-            lines.append(f"  {player.position} (P{player.player_id}): ${player.stack:.0f} ({status}){cards_str}")
+            lines.append(f"  {player.position} (P{player.player_id}): ${player.stack:.1f} ({status}){cards_str}")
         
         # Current action
         if not self.state.is_betting_round_complete():
             current = self.state.current_player()
             lines.append(f"\nAction on: {current.position} (P{current.player_id})")
-            lines.append(f"Current bet: ${self.state.current_bet:.0f}")
+            lines.append(f"Current bet: ${self.state.current_bet:.1f}")
         
         return "\n".join(lines)
