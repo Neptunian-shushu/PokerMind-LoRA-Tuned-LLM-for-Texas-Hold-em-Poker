@@ -1,9 +1,15 @@
-import { useState } from 'react';
 import Card from './Card';
 import Player from './Player';
 import './PokerTable.css';
+import { BETTING_ROUNDS } from '../utils/gameLogic';
 
-const PokerTable = ({ players, communityCards, pot, currentPlayerIndex }) => {
+const PokerTable = ({ 
+  players, 
+  communityCards, 
+  pot, 
+  currentPlayerIndex, 
+  phase = BETTING_ROUNDS.PREFLOP 
+}) => {
   return (
     <div className="poker-table-container">
       <div className="poker-table">
@@ -17,18 +23,27 @@ const PokerTable = ({ players, communityCards, pot, currentPlayerIndex }) => {
             </div>
           </div>
           <div className="cards-area">
+            <div className="phase-indicator">
+              {phase.toUpperCase()}
+            </div>
             {communityCards.length > 0 ? (
-              communityCards.map((card, index) => (
-                <Card 
-                  key={index} 
-                  rank={card.rank} 
-                  suit={card.suit} 
-                  faceDown={card.faceDown}
-                />
-              ))
+              <div className="community-cards-grid">
+                {communityCards.map((card, index) => (
+                  <Card 
+                    key={index} 
+                    rank={card.rank} 
+                    suit={card.suit} 
+                    faceDown={card.faceDown}
+                    className={`community-card ${
+                      index < 3 ? 'flop' : 
+                      index === 3 ? 'turn' : 'river'
+                    }`}
+                  />
+                ))}
+              </div>
             ) : (
-              <div style={{ color: '#888', fontSize: '14px', padding: '20px' }}>
-                Preflop - No community cards yet
+              <div className="no-cards-message">
+                Preflop - Waiting for community cards
               </div>
             )}
           </div>

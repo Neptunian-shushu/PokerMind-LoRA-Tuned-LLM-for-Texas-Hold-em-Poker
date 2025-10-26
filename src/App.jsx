@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import PokerTable from './components/PokerTable';
 import ControlPanel from './components/ControlPanel';
-import { initializeGame, playerAction, moveToNextPlayer, isRoundComplete, getAvailableActions, determineWinner } from './utils/gameLogic';
+import { initializeGame, playerAction, moveToNextPlayer, isRoundComplete, getAvailableActions, determineWinner, BETTING_ROUNDS, advanceToNextRound } from './utils/gameLogic';
 import { getAIDecision } from './services/aiService';
 import './App.css';
 
@@ -53,26 +53,80 @@ function App() {
       
       // check if round is complete
       if (isRoundComplete(newState)) {
-        // preflop round complete
         const result = determineWinner(newState);
         
         if (result.isFinished) {
-          // game over in preflop (all players folded)
-          const winningPlayer = newState.players[result.winnerId];
-          newState.players[result.winnerId].chips += newState.pot;
-          setMessage(`${winningPlayer.name} wins the pot of $${newState.pot}!`);
+          // 游戏结束（所有玩家弃牌或摊牌）
+          const updatedState = result.gameState;
+          const winningPlayer = updatedState.players[result.winnerId];
+
+          // 仅显示三条信息：赢家、赢得金额、你的最终筹码（含收益）
+          const winnerStats = result.playerStats?.find(p => p.id === result.winnerId);
+          const amountWon = winnerStats?.netGain ?? updatedState.pot;
+          const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+          const yourFinalChips = result.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
+
+          const resultMessage = [
+            `Winner: ${winningPlayer.name}`,
+            `Won: $${amountWon}`,
+            `Your Chips: $${yourFinalChips}`
+          ];
+
+          setMessage(resultMessage.join(' | '));
           setGameOver(true);
           setIsProcessing(false);
-          return newState;
-        } else {
-          // TODO:  postflop logic here
-          console.log('=== Preflop Complete - Ready for Postflop ===');
-          console.log('Active Players:', result.activePlayers.length);
-          console.log('Pot:', newState.pot);
-          
-          // temporary: show message and end game
-          setMessage(`Preflop complete! ${result.activePlayers.length} players remain. (Postflop TODO)`);
+          return result.gameState;
+        } else if (newState.phase === BETTING_ROUNDS.SHOWDOWN) {
+          // 到达摊牌阶段 - 处理摊牌结果
+          const result = determineWinner(newState);
+          const updatedState = result.gameState;
+          const winningPlayer = updatedState.players[result.winnerId];
+
+          // 仅显示三条信息：赢家、赢得金额、你的最终筹码（含收益）
+          const winnerStats = result.playerStats?.find(p => p.id === result.winnerId);
+          const amountWon = winnerStats?.netGain ?? updatedState.pot;
+          const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+          const yourFinalChips = result.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
+
+          const resultMessage = [
+            `Winner: ${winningPlayer.name}`,
+            `Won: $${amountWon}`,
+            `Your Chips: $${yourFinalChips}`
+          ];
+
+          setMessage(resultMessage.join(' | '));
           setGameOver(true);
+          setIsProcessing(false);
+          return result.gameState;
+        } else {
+          // 进入下一个回合
+          console.log(`=== ${newState.phase} Complete - Moving to Next Round ===`);
+          newState = advanceToNextRound(newState);
+
+          // 如果推进后是摊牌，立即结算，不再等待额外一次"Check"
+          if (newState.phase === BETTING_ROUNDS.SHOWDOWN) {
+            const sdResult = determineWinner(newState);
+            const updatedState = sdResult.gameState;
+            const winningPlayer = updatedState.players[sdResult.winnerId];
+
+            const winnerStats = sdResult.playerStats?.find(p => p.id === sdResult.winnerId);
+            const amountWon = winnerStats?.netGain ?? updatedState.pot;
+            const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+            const yourFinalChips = sdResult.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
+
+            const resultMessage = [
+              `Winner: ${winningPlayer.name}`,
+              `Won: $${amountWon}`,
+              `Your Chips: $${yourFinalChips}`
+            ];
+
+            setMessage(resultMessage.join(' | '));
+            setGameOver(true);
+            setIsProcessing(false);
+            return sdResult.gameState;
+          }
+
+          setMessage(`Moving to ${newState.phase.toUpperCase()}`);
           setIsProcessing(false);
           return newState;
         }
@@ -97,6 +151,34 @@ function App() {
     if (!gameState || isProcessing || gameOver) return;
 
     const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+    
+    // 更新游戏状态显示
+    const updateGameStatus = () => {
+      const activePlayers = gameState.players.filter(p => !p.isFolded);
+      let statusMessage = '';
+
+      switch(gameState.phase) {
+        case BETTING_ROUNDS.PREFLOP:
+          statusMessage = `Preflop - ${activePlayers.length} players, pot: $${gameState.pot}`;
+          break;
+        case BETTING_ROUNDS.FLOP:
+          statusMessage = `Flop - ${gameState.communityCards.slice(0, 3).map(c => `${c.rank}${c.suit}`).join(' ')}, pot: $${gameState.pot}`;
+          break;
+        case BETTING_ROUNDS.TURN:
+          statusMessage = `Turn - ${gameState.communityCards[3].rank}${gameState.communityCards[3].suit}, pot: $${gameState.pot}`;
+          break;
+        case BETTING_ROUNDS.RIVER:
+          statusMessage = `River - ${gameState.communityCards[4].rank}${gameState.communityCards[4].suit}, pot: $${gameState.pot}`;
+          break;
+        case BETTING_ROUNDS.SHOWDOWN:
+          statusMessage = `Showdown - Final pot: $${gameState.pot}`;
+          break;
+      }
+
+      setMessage(statusMessage);
+    };
+
+    updateGameStatus();
     
     if (!currentPlayer.isHuman && !currentPlayer.isFolded) {
       // use setTimeout to ensure state is updated before processing
@@ -135,24 +217,78 @@ function App() {
       const result = determineWinner(newState);
       
       if (result.isFinished) {
-        // game over in preflop (all players folded)
-        const winningPlayer = newState.players[result.winnerId];
-        newState.players[result.winnerId].chips += newState.pot;
-        setMessage(`${winningPlayer.name} wins the pot of $${newState.pot}!`);
+        // 游戏结束（包括弃牌和摊牌的情况）
+        const updatedState = result.gameState;
+        const winningPlayer = updatedState.players[result.winnerId];
+
+        const winnerStats = result.playerStats?.find(p => p.id === result.winnerId);
+        const amountWon = winnerStats?.netGain ?? updatedState.pot;
+        const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+        const yourFinalChips = result.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
+
+        const resultMessage = [
+          `Winner: ${winningPlayer.name}`,
+          `Won: $${amountWon}`,
+          `Your Chips: $${yourFinalChips}`
+        ];
+
+        setMessage(resultMessage.join(' | '));
         setGameOver(true);
-        setGameState(newState);
+        setGameState(updatedState);
+        setIsProcessing(false);
+        return;
+      } else if (newState.phase === BETTING_ROUNDS.SHOWDOWN) {
+        // 到达摊牌阶段 - 处理摊牌结果（仅显示三条信息）
+        const result = determineWinner(newState);
+        const updatedState = result.gameState;
+        const winningPlayer = updatedState.players[result.winnerId];
+
+        const winnerStats = result.playerStats?.find(p => p.id === result.winnerId);
+        const amountWon = winnerStats?.netGain ?? updatedState.pot;
+        const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+        const yourFinalChips = result.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
+
+        const resultMessage = [
+          `Winner: ${winningPlayer.name}`,
+          `Won: $${amountWon}`,
+          `Your Chips: $${yourFinalChips}`
+        ];
+
+        setMessage(resultMessage.join(' | '));
+        setGameOver(true);
+        setGameState(updatedState);
         setIsProcessing(false);
         return;
       } else {
-        // need to continue to postflop
-        // TODO: postflop logic here
-        console.log('=== Preflop Complete - Ready for Postflop ===');
-        console.log('Active Players:', result.activePlayers.length);
-        console.log('Pot:', newState.pot);
-        
-        // temporary: show message and end game
-        setMessage(`Preflop complete! ${result.activePlayers.length} players remain. (Postflop TODO)`);
-        setGameOver(true);
+        // 进入下一个回合
+        console.log(`=== ${newState.phase} Complete - Moving to Next Round ===`);
+        newState = advanceToNextRound(newState);
+
+        // 如果推进后是摊牌，立即结算，不再等待额外一次"Check"
+        if (newState.phase === BETTING_ROUNDS.SHOWDOWN) {
+          const sdResult = determineWinner(newState);
+          const updatedState = sdResult.gameState;
+          const winningPlayer = updatedState.players[sdResult.winnerId];
+
+          const winnerStats = sdResult.playerStats?.find(p => p.id === sdResult.winnerId);
+          const amountWon = winnerStats?.netGain ?? updatedState.pot;
+          const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+          const yourFinalChips = sdResult.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
+
+          const resultMessage = [
+            `Winner: ${winningPlayer.name}`,
+            `Won: $${amountWon}`,
+            `Your Chips: $${yourFinalChips}`
+          ];
+
+          setMessage(resultMessage.join(' | '));
+          setGameOver(true);
+          setGameState(updatedState);
+          setIsProcessing(false);
+          return;
+        }
+
+        setMessage(`Moving to ${newState.phase.toUpperCase()}`);
         setGameState(newState);
         setIsProcessing(false);
         return;
@@ -223,6 +359,7 @@ function App() {
                 communityCards={gameState.communityCards}
                 pot={gameState.pot}
                 currentPlayerIndex={gameState.currentPlayerIndex}
+                phase={gameState.phase}
               />
             </div>
 
