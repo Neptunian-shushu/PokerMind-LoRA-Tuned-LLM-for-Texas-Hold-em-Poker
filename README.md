@@ -19,7 +19,3 @@ node server.js  # AI service
 ## Example
 ![pic1](public/pic1.png)
 ![pic2](public/pic2.png)
-![pic3](public/pic3.png)
-![pic4](public/pic4.png)
-![pic5](public/pic5.png)
-![pic6](public/pic6.png)
