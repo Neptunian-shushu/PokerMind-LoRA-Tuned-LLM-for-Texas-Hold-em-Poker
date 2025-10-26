@@ -78,11 +78,83 @@
 
 .cards-area {
   display: flex;
-  gap: 5px;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   padding: 10px 14px;
   background: rgba(0, 0, 0, 0.3);
   border-radius: 8px;
   box-shadow: 0 3px 15px rgba(0, 0, 0, 0.4);
+}
+
+.phase-indicator {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fbbf24;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+
+.community-cards-grid {
+  display: flex;
+  gap: 5px;
+}
+
+.no-cards-message {
+  color: #888;
+  font-size: 14px;
+  padding: 10px;
+  text-align: center;
+}
+
+.community-card {
+  transition: transform 0.3s ease;
+}
+
+.community-card.flop {
+  animation: dealFlop 0.3s ease-out forwards;
+}
+
+.community-card.turn {
+  animation: dealTurn 0.3s ease-out forwards;
+}
+
+.community-card.river {
+  animation: dealRiver 0.3s ease-out forwards;
+}
+
+@keyframes dealFlop {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dealTurn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes dealRiver {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .players-grid {

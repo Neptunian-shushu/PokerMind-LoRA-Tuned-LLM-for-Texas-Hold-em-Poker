@@ -90,7 +90,7 @@ const buildActionHistory = (gameState, playerId) => {
   const actions = [];
   
   // record blind bets
-  gameState.players.forEach((p, idx) => {
+  gameState.players.forEach((p) => {
     if (p.action === 'SB') {
       actions.push(`${p.name} posted small blind (${gameState.smallBlind} chips)`);
     } else if (p.action === 'BB') {
@@ -122,11 +122,44 @@ const extractJSON = (content) => {
 
 // call backend API to get AI decision
 export const getAIDecision = async (gameState, playerId) => {
+  // Helper: normalize action strings from the model to our internal action keys
+  const normalizeAction = (raw) => {
+    const a = String(raw || '').trim().toLowerCase();
+    if (a === 'fold') return 'fold';
+    if (a === 'check') return 'check';
+    if (a === 'call') return 'call';
+    if (a === 'raise') return 'raise';
+    if (a === 'all-in' || a === 'all in' || a === 'allin') return 'all-in';
+    // Default safe choice when unknown
+    return 'check';
+  };
+
+  // Simple rule-based fallback when API is unavailable or returns invalid data
+  const fallbackDecision = () => {
+    const player = gameState.players[playerId];
+    const toCall = Math.max(0, gameState.currentBet - player.totalBetThisRound);
+    // If cannot cover the call, go all-in (short call)
+    if (toCall > 0 && player.chips <= toCall) {
+      return { action: 'all-in', raiseAmount: 0, reasoning: 'Short stack all-in to call', confidence: 60 };
+    }
+    // If nothing to call, check most of the time
+    if (toCall === 0) {
+      return { action: 'check', raiseAmount: 0, reasoning: 'Free check', confidence: 70 };
+    }
+    // Cheap call threshold
+    const cheap = player.chips * 0.05;
+    if (toCall <= cheap) {
+      return { action: 'call', raiseAmount: 0, reasoning: 'Price is cheap to continue', confidence: 55 };
+    }
+    // Otherwise fold conservatively
+    return { action: 'fold', raiseAmount: 0, reasoning: 'Conservative fold vs large bet', confidence: 55 };
+  };
+
   try {
     const prompt = buildPreflopStatePrompt(gameState, playerId);
-    
+
     console.log('Calling backend API for AI decision...');
-    
+
     const response = await fetch(`${API_URL}/api/ai-decision`, {
       method: 'POST',
       headers: {
@@ -140,23 +173,26 @@ export const getAIDecision = async (gameState, playerId) => {
     }
 
     const data = await response.json();
-    const content = data.content;
-    
+    const content = data.content || '';
+
     const jsonContent = extractJSON(content);
-    const decision = JSON.parse(jsonContent);
-    
-    console.log('AI Decision:', decision);
-    
+    const parsed = JSON.parse(jsonContent);
+
+    const action = normalizeAction(parsed.action);
+    const raiseAmount = Number(parsed.raiseAmount) || 0;
+
+    console.log('AI Decision:', { action: parsed.action, normalized: action, raiseAmount });
+
     return {
-      action: decision.action.toLowerCase().replace('-', ''),
-      raiseAmount: decision.raiseAmount || 0,
-      reasoning: decision.reasoning,
-      confidence: decision.confidence
+      action,
+      raiseAmount,
+      reasoning: parsed.reasoning || '',
+      confidence: parsed.confidence || 50
     };
-    
   } catch (error) {
     console.error('Error calling backend API:', error);
     console.log('Falling back to rule-based AI...');
+    return fallbackDecision();
   }
 };
 

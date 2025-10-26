@@ -53,7 +53,7 @@ const ControlPanel = ({
           <div className="game-info">
             <div className="info-item">
               <span className="info-label">Phase:</span>
-              <span className="info-value">Preflop</span>
+              <span className="info-value">{gameState?.phase?.toUpperCase() || 'PREFLOP'}</span>
             </div>
             <div className="info-item">
               <span className="info-label">Pot:</span>
@@ -74,8 +74,15 @@ const ControlPanel = ({
         {gameOver ? (
           <div className="game-over-section">
             <div className="game-over-message">
-              <h3>Game Over!</h3>
-              <p>{message}</p>
+              <h3>🎉 Game Complete!</h3>
+              {message.split(' | ').map((line, index) => (
+                <p key={index} className={`game-result-line ${
+                  line.includes('WINS!') ? 'winner-line' : 
+                  line.includes('Net Gain') ? 'gain-line' : ''
+                }`}>
+                  {line}
+                </p>
+              ))}
             </div>
             <button 
               onClick={onNewGame}
