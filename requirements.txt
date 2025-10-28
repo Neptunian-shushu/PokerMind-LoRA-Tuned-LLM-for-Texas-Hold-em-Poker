@@ -23,6 +23,10 @@ tqdm
 matplotlib
 seaborn
 
+# Backend Service
+fastapi
+uvicorn
+
 # Note: The following are already available in PACE anaconda3 environment:
 # - torch (via CUDA modules)
 # - scikit-learn

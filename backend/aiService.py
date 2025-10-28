@@ -13,6 +13,24 @@ import os
 
 app = FastAPI(title="PokerMind API", description="LoRA-Tuned LLM for Poker Decision Prediction", version="1.0")
 
+from fastapi.middleware.cors import CORSMiddleware
+
+# CORS
+origins = [
+    "http://localhost:5173",  
+    "http://localhost:5174", 
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,          
+    allow_credentials=True,
+    allow_methods=["*"],           
+    allow_headers=["*"],            
+)
+
 print("Loading model and tokenizer...")
 
 os.environ["HF_HOME"] = "../../hf_cache"
@@ -67,7 +85,7 @@ def predict_action(request: PokerScenario):
     """POST endpoint to predict poker action."""
     try:
         result = predict_poker_action(model, tokenizer, request.instruction)
-        return {"instruction": request.instruction, "predicted_action": result}
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
