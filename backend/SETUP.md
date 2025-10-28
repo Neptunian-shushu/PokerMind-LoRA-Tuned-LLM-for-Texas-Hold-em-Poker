@@ -4,6 +4,9 @@
 # change to gpu node
 srun --partition=ice-gpu --gres=gpu:H100:1 --mem=40G --time=01:00:00 --pty bash 
 
+module load anaconda3
+conda activate cs6220 
+
 # run uvicorn in the background
 nohup uvicorn aiService:app --host 0.0.0.0 --port 8000 > fastapi.log 2>&1 &
 
