@@ -1,108 +1,76 @@
-"""
-PPO Hyperparameters and Configuration
-"""
-
-from dataclasses import dataclass
-from typing import Optional
-
+# ppo/config.py
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 @dataclass
 class PPOConfig:
-    """Configuration for PPO training"""
-    
-    # Model paths
-    base_model_path: str = "/home/hice1/bshu30/CS6220/poker-lora-model/Meta-Llama-3-8B/"
-    output_dir: str = "/home/hice1/bshu30/CS6220/ppo/ppo_checkpoints/"
-    log_dir: str = "/home/hice1/bshu30/CS6220/logs/ppo/"
-    
-    # Training hyperparameters
-    num_episodes: int = 10000  # Number of self-play games
-    steps_per_episode: int = 50  # Max steps per game (prevent infinite loops)
-    batch_size: int = 32  # Batch size for PPO updates
-    epochs_per_update: int = 4  # PPO epochs per batch
-    learning_rate: float = 1e-6  # Learning rate for policy updates
-    
-    # PPO algorithm parameters
-    gamma: float = 0.99  # Discount factor for rewards
-    gae_lambda: float = 0.95  # GAE lambda for advantage estimation
-    clip_epsilon: float = 0.2  # PPO clipping parameter
-    value_loss_coef: float = 0.5  # Coefficient for value loss
-    entropy_coef: float = 0.01  # Entropy bonus for exploration
-    max_grad_norm: float = 0.5  # Gradient clipping
-    
-    # KL divergence constraint (keep policy close to reference)
-    kl_coef: float = 0.1  # Coefficient for KL penalty
-    target_kl: float = 0.01  # Target KL divergence
-    adaptive_kl: bool = True  # Adapt KL coefficient during training
-    
-    # Poker game settings
-    num_players: int = 2  # Number of players in self-play
-    starting_stack: float = 100.0  # Starting chips
-    small_blind: float = 0.5  # Small blind amount
-    big_blind: float = 1.0  # Big blind amount
-    
-    # Reward shaping
-    win_reward: float = 1.0  # Reward for winning a hand
-    lose_penalty: float = -1.0  # Penalty for losing
-    fold_penalty: float = -0.1  # Small penalty for folding (encourage playing)
-    showdown_bonus: float = 0.2  # Bonus for reaching showdown
-    
-    # Training efficiency
-    num_workers: int = 1  # Parallel game environments (future enhancement)
-    gradient_accumulation_steps: int = 4  # Accumulate gradients
-    fp16: bool = True  # Use mixed precision training
-    
-    # Evaluation
-    eval_frequency: int = 500  # Evaluate every N episodes
-    eval_episodes: int = 100  # Number of games for evaluation
-    save_frequency: int = 1000  # Save checkpoint every N episodes
-    
-    # Model settings
-    max_sequence_length: int = 512  # Max tokens for LLM input
-    temperature: float = 0.8  # Sampling temperature
-    top_p: float = 0.9  # Nucleus sampling
-    
-    # Logging
-    log_frequency: int = 10  # Log metrics every N episodes
-    wandb_project: Optional[str] = None  # W&B project name (optional)
-    wandb_entity: Optional[str] = None  # W&B entity
-    
-    # Reproducibility
+    # Model & adapters
+    base_repo_or_path: str = "meta-llama/Meta-Llama-3-8B"
+    adapter_paths: List[str] = field(default_factory=lambda: [
+        "/home/hice1/yli3776/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker/poker-lora-model/Meta-Llama-3-8B"
+    ])
+    adapter_register_names: List[str] = field(default_factory=lambda: ["A"])
+    seat_adapter_names: List[str] = field(default_factory=lambda: ["A", "A"])
+
+    # IO
+    output_dir: str = "/home/hice1/yli3776/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker/ppo/ppo_checkpoints/"
+    log_dir: str    = "/home/hice1/yli3776/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker/logs/ppo/"
+    rl_adapter_save_dir: str = "/home/hice1/yli3776/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker/ppo/rl_adapters/"
+
+    # Training loop
+    num_episodes: int = 10000
+    steps_per_episode: int = 50
+    learning_rate: float = 1e-6
+    log_frequency: int = 10
+    save_frequency: int = 1000
+    save_adapter_every: int = 1000
+
+    # Eval
+    eval_frequency: int = 500
+    eval_episodes: int = 100
+
+    # Poker env
+    num_players: int = 2
+    starting_stack: float = 100.0
+    small_blind: float = 0.5
+    big_blind: float = 1.0
+
+    # LLM inference
+    max_seq_len: int = 512
+    temperature: float = 0.8
+    # top_p: float = 0.9
+    use_scoring: bool = True
+    device_map: str = "auto"
+    torch_dtype: str = "float16"
+
+    # Repro
     seed: int = 42
     
+    # RL training
+    max_grad_norm: float = 1.0
+
     def __post_init__(self):
-        """Validate configuration"""
-        assert 0 < self.gamma <= 1, "gamma must be in (0, 1]"
-        assert 0 < self.gae_lambda <= 1, "gae_lambda must be in (0, 1]"
-        assert self.clip_epsilon > 0, "clip_epsilon must be positive"
-        assert self.kl_coef >= 0, "kl_coef must be non-negative"
-        assert self.num_players >= 2, "num_players must be at least 2"
-    
+        assert self.num_players >= 2
+        assert self.big_blind > 0
+        if len(self.seat_adapter_names) != self.num_players:
+            if len(self.seat_adapter_names) == 1:
+                self.seat_adapter_names = [self.seat_adapter_names[0] for _ in range(self.num_players)]
+            else:
+                raise ValueError("seat_adapter_names must have length == num_players")
+
     def to_dict(self):
-        """Convert config to dictionary"""
-        return {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+        return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
 
 
-# Default configuration
+# Create default configuration instances
 DEFAULT_CONFIG = PPOConfig()
 
-
-# Fast training config (for testing)
+# Fast config for testing (smaller episodes, more frequent logging)
 FAST_CONFIG = PPOConfig(
     num_episodes=100,
-    batch_size=16,
-    eval_frequency=50,
-    save_frequency=50
-)
-
-
-# Production config (full training)
-PRODUCTION_CONFIG = PPOConfig(
-    num_episodes=50000,
-    batch_size=64,
-    epochs_per_update=4,
-    learning_rate=5e-7,
-    eval_frequency=1000,
-    save_frequency=2000,
-    gradient_accumulation_steps=8
+    steps_per_episode=20,
+    log_frequency=5,
+    save_frequency=50,
+    eval_frequency=25,
+    eval_episodes=10
 )
