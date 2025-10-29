@@ -56,7 +56,7 @@ class HandEvaluator:
             return HandEvaluator.evaluate_hand(best_hand)
         
         # Evaluate the 5-card hand
-        ranks = sorted([c.rank.value for c in cards], reverse=True)
+        ranks = sorted([c.rank.numeric_value for c in cards], reverse=True)
         suits = [c.suit for c in cards]
         rank_counts = Counter(ranks)
         

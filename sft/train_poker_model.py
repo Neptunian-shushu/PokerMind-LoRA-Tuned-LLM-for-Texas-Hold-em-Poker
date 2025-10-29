@@ -190,8 +190,7 @@ def main():
         fp16=True,
         gradient_checkpointing=True,
         logging_steps=50,                 # Log every 50 steps (~6% of epoch)
-        save_steps=200,                   # Save checkpoints every 200 steps
-        save_total_limit=3,               # Keep 3 checkpoints
+        save_strategy="no",               # Disable checkpoint saving
         eval_strategy="steps",            # Evaluate at regular intervals
         eval_steps=200,                   # Evaluate every 200 steps (~4 times per epoch)
         remove_unused_columns=False,
