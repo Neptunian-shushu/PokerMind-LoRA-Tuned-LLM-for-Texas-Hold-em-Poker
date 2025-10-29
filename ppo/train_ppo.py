@@ -1,6 +1,6 @@
 # ppo/train_ppo.py
 """
-Self-play RL entrypoint (A-route: shared base + LoRA adapters).
+Self-play RL entrypoint (Shared base + LoRA adapters).
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ def build_agents_and_controller(cfg: PPOConfig):
         torch_dtype=cfg.torch_dtype,
         device_map=cfg.device_map,
         trust_remote_code=True,
+        use_4bit=False,  # Disable 4-bit quantization - it was causing accuracy drop
     )
     for path, name in zip(cfg.adapter_paths, cfg.adapter_register_names):
         ctl.load_adapter(path, name=name)
@@ -116,29 +117,58 @@ def eval_pokerbench_accuracy(ctl: SharedLLMController, adapter_name: str, max_sa
 
     ds = load_dataset("RZ412/PokerBench")
     test = ds["test"]
-    n = min(max_samples, len(test))
-    correct = 0
-    total = 0
-
-    for i in range(n):
-        inst = test[i]["instruction"]
-        out = test[i]["output"]
-        target_label = _parse_pb_target_to_label(out)
-        prompt = _format_pb_prompt(inst) + _tail_instruction()
-        probs = _score_candidates(tok, mdl, prompt, DISCRETE_ACTIONS)
-        pred = DISCRETE_ACTIONS[int(np.argmax(probs))]
-        # collapse bet/raise families to action verb for fairness
-        def coarse(lbl):
-            if lbl.startswith("bet_"): return "bet"
-            if lbl.startswith("raise_"): return "raise"
-            return lbl
-        if coarse(pred) == coarse(target_label):
-            correct += 1
-        total += 1
-
-    acc = (correct / total) * 100.0 if total > 0 else -1.0
-    print(f"[eval] PokerBench action-accuracy (coarse) on {total} samples = {acc:.2f}%")
-    return acc
+    
+    # Helper to detect if a sample is preflop
+    def is_preflop(instruction):
+        """Check if instruction is a preflop scenario (no community cards)"""
+        inst_lower = instruction.lower()
+        # Postflop scenarios contain phrases about community cards being dealt
+        if "the flop comes" in inst_lower or "the turn comes" in inst_lower or "the river comes" in inst_lower:
+            return False  # Postflop
+        return True  # Preflop
+    
+    # Separate samples into preflop and postflop
+    preflop_indices = []
+    postflop_indices = []
+    for i in range(len(test)):
+        if is_preflop(test[i]["instruction"]):
+            preflop_indices.append(i)
+        else:
+            postflop_indices.append(i)
+    
+    # Evaluate both categories separately (max_samples each)
+    def coarse(lbl):
+        if lbl.startswith("bet_"): return "bet"
+        if lbl.startswith("raise_"): return "raise"
+        return lbl
+    
+    def eval_subset(indices, name):
+        n = min(max_samples, len(indices))
+        correct = 0
+        for i in range(n):
+            idx = indices[i]
+            inst = test[idx]["instruction"]
+            out = test[idx]["output"]
+            target_label = _parse_pb_target_to_label(out)
+            prompt = _format_pb_prompt(inst)
+            probs = _score_candidates(tok, mdl, prompt, DISCRETE_ACTIONS)
+            pred = DISCRETE_ACTIONS[int(np.argmax(probs))]
+            if coarse(pred) == coarse(target_label):
+                correct += 1
+        acc = (correct / n) * 100.0 if n > 0 else -1.0
+        print(f"[eval] {name} accuracy: {acc:.2f}% ({correct}/{n} samples)")
+        return acc, n
+    
+    preflop_acc, preflop_n = eval_subset(preflop_indices, "Preflop")
+    postflop_acc, postflop_n = eval_subset(postflop_indices, "Postflop")
+    
+    # Overall accuracy (weighted average)
+    total_correct = int(preflop_acc * preflop_n / 100.0) + int(postflop_acc * postflop_n / 100.0)
+    total_n = preflop_n + postflop_n
+    overall_acc = (total_correct / total_n) * 100.0 if total_n > 0 else -1.0
+    print(f"[eval] Overall accuracy: {overall_acc:.2f}% ({total_correct}/{total_n} samples)")
+    
+    return overall_acc
 
 # ---- main loop ----
 def main(cfg: PPOConfig = DEFAULT_CONFIG):
@@ -152,8 +182,11 @@ def main(cfg: PPOConfig = DEFAULT_CONFIG):
     agents, ctl = build_agents_and_controller(cfg)
 
     t0 = time.time()
+    print(f"Starting training loop: {cfg.num_episodes} episodes", flush=True)
     for ep in range(1, cfg.num_episodes + 1):
+        print(f"Episode {ep} starting...", flush=True)
         log = trainer.play_one_episode(agents=agents)
+        print(f"Episode {ep} completed: {log.get('steps', 0)} steps", flush=True)
 
         if ep % cfg.log_frequency == 0:
             tr = log.get("terminal_rewards", [])
@@ -189,4 +222,6 @@ def main(cfg: PPOConfig = DEFAULT_CONFIG):
     print(f"Done. Episodes={cfg.num_episodes}, elapsed={dt:.1f}s")
 
 if __name__ == "__main__":
-    main()
+    # Use FAST_CONFIG for testing (100 episodes), or DEFAULT_CONFIG for full training (10,000 episodes)
+    from ppo.config import FAST_CONFIG
+    main(cfg=FAST_CONFIG)

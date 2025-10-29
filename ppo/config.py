@@ -20,7 +20,7 @@ class PPOConfig:
     # Training loop
     num_episodes: int = 10000
     steps_per_episode: int = 50
-    learning_rate: float = 1e-6
+    learning_rate: float = 1e-4
     log_frequency: int = 10
     save_frequency: int = 1000
     save_adapter_every: int = 1000
@@ -31,14 +31,14 @@ class PPOConfig:
 
     # Poker env
     num_players: int = 2
-    starting_stack: float = 100.0
+    starting_stack: float = 10.0
     small_blind: float = 0.5
     big_blind: float = 1.0
 
     # LLM inference
     max_seq_len: int = 512
     temperature: float = 0.8
-    # top_p: float = 0.9
+    top_p: float = 0.9
     use_scoring: bool = True
     device_map: str = "auto"
     torch_dtype: str = "float16"
@@ -72,5 +72,5 @@ FAST_CONFIG = PPOConfig(
     log_frequency=5,
     save_frequency=50,
     eval_frequency=25,
-    eval_episodes=10
+    eval_episodes=100
 )

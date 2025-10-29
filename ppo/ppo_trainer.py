@@ -71,17 +71,19 @@ class PPOTrainer:
         agents = self._ensure_agents(agents)
         self._maybe_build_optimizer(agents)
 
+        print(f"  Starting episode: init_env done", flush=True)
         init_stacks = [p.stack for p in env.players]
         state = env.reset()
         done = False
         steps = 0
 
-        # Per-agent logs for policy gradient
-        # Each entry: list of (logp_chosen tensor)
-        pg_logs: List[List[torch.Tensor]] = [[] for _ in range(self.cfg.num_players)]
+        # Track log-probs for each player to compute policy gradient at episode end
+        pg_logs = {pid: [] for pid in range(self.cfg.num_players)}
 
         # Keep simple bookkeeping
+        print(f"  Episode loop starting, max steps={self.cfg.steps_per_episode}", flush=True)
         while not done and steps < self.cfg.steps_per_episode:
+            print(f"    Step {steps}: player {state.current_player().player_id} acting...", flush=True)
             current_player = state.current_player()
             pid = current_player.player_id
             legal_actions = state.get_valid_actions(current_player)
@@ -95,23 +97,26 @@ class PPOTrainer:
                     agent._controller.set_adapter(agent._adapter_name)
 
                 # Build prompt + strict tail
+                print(f"    Building prompt for player {pid}...", flush=True)
                 prompt = state.get_llm_prompt(pid) + agent._tail_instruction()
                 # logp_vec[B], prob_vec[B], choice_idx, logp_chosen
+                print(f"    Scoring candidates for player {pid}...", flush=True)
                 logp_vec, prob_vec, idx, logp_chosen = agent.score_candidates_train(
                     prompt, DISCRETE_ACTIONS
                 )
+                print(f"    Scored, chosen action index: {idx}", flush=True)
                 label = DISCRETE_ACTIONS[int(idx)]
                 action, amount = _legalize_label(label, legal_actions, state, current_player)
 
+                # Store log-prob for policy gradient
+                pg_logs[pid].append(logp_chosen)
+
                 # Step env
+                print(f"    Executing env.step({action}, {amount})...", flush=True)
                 state, hand_complete, result = env.step(action, float(amount))
+                print(f"    Step complete. hand_complete={hand_complete}, steps={steps+1}", flush=True)
                 done = hand_complete
                 steps += 1
-
-                # Save per-step logp for this agent only when action was taken
-                # (One decision per step by the current seat)
-                # Detached advantage will be multiplied later.
-                pg_logs[pid].append(logp_chosen)
 
             else:
                 # Non-LLM or non-scoring fallback: act() without grad
@@ -135,24 +140,21 @@ class PPOTrainer:
             terminal_rewards.append(float(r))
 
         # ----- policy gradient update -----
-        # Advantage: use terminal reward baseline only (no value fn). Detach to avoid leaking grads.
-        if self._optim is not None:
+        if self._optim is not None and steps > 0:
             self._optim.zero_grad(set_to_none=True)
-            total_loss = torch.tensor(0.0, device=pg_logs[0][0].device) if any(pg_logs) else None
-
+            
+            # REINFORCE loss: sum over all players and their actions
+            loss = torch.tensor(0.0, device='cuda' if torch.cuda.is_available() else 'cpu')
             for pid in range(self.cfg.num_players):
-                if not pg_logs[pid]:
-                    continue
-                adv = torch.tensor(terminal_rewards[pid], dtype=torch.float32, device=pg_logs[pid][0].device)
-                # Per-step REINFORCE; here we attribute the whole terminal return to all decisions of that seat
-                seat_loss = torch.tensor(0.0, device=adv.device)
-                for lp in pg_logs[pid]:
-                    seat_loss = seat_loss - lp * adv
-                total_loss = seat_loss if total_loss is None else (total_loss + seat_loss)
-
-            if total_loss is not None:
+                if len(pg_logs[pid]) > 0:
+                    advantage = terminal_rewards[pid]
+                    for logp in pg_logs[pid]:
+                        loss = loss - logp * advantage
+            
+            # Backprop
+            if loss.requires_grad:
+                loss.backward()
                 nn_utils.clip_grad_norm_(self._optim.param_groups[0]['params'], self.cfg.max_grad_norm)
-                total_loss.backward()
                 self._optim.step()
 
         log = {

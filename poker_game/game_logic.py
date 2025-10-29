@@ -248,8 +248,13 @@ class PokerGame:
             self.state.current_bet = player.current_bet
             self.state.min_raise = amount
     
-    def _advance_betting_round(self) -> Tuple[GameState, bool, Optional[Dict]]:
+    def _advance_betting_round(self, recursion_depth: int = 0) -> Tuple[GameState, bool, Optional[Dict]]:
         """Move to next betting round or showdown"""
+        if recursion_depth > 10:
+            # Safety: prevent infinite recursion
+            print(f"WARNING: Excessive recursion in _advance_betting_round (depth={recursion_depth})", flush=True)
+            return self._handle_showdown()
+        
         active_players = self.state.get_active_players()
         
         # If only one player left, they win
@@ -280,12 +285,15 @@ class PokerGame:
         
         # Set first player to act (after button)
         self.state.current_player_idx = (self.state.button_position + 1) % self.num_players
-        while not self.players[self.state.current_player_idx].can_act():
+        max_iterations = self.num_players
+        for _ in range(max_iterations):
+            if self.players[self.state.current_player_idx].can_act():
+                break
             self.state.next_player()
         
         # Check if betting round immediately complete (all all-in)
         if self.state.is_betting_round_complete():
-            return self._advance_betting_round()
+            return self._advance_betting_round(recursion_depth + 1)
         
         return self.state, False, None
     

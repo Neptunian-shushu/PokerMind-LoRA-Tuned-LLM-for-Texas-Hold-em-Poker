@@ -62,8 +62,8 @@ class RandomAgent(AgentBase):
 # ----- Optional HF/PEFT -----
 try:
     import torch
-    from transformers import AutoTokenizer, AutoModelForCausalLM
-    from peft import PeftModel
+    from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+    from peft import PeftModel, prepare_model_for_kbit_training
     _HAS_TRANSFORMERS = True
 except Exception:
     _HAS_TRANSFORMERS = False
@@ -71,20 +71,48 @@ except Exception:
 # ----- Shared base + multi-adapters -----
 class SharedLLMController:
     """One base model shared by seats; load/switch multiple LoRA adapters."""
-    def __init__(self, base_repo_or_path: str, torch_dtype: str="float16", device_map: str="auto", trust_remote_code: bool=True):
+    def __init__(self, base_repo_or_path: str, torch_dtype: str="float16", device_map: str="auto", trust_remote_code: bool=True, use_4bit: bool=True):
         if not _HAS_TRANSFORMERS: raise RuntimeError("transformers/peft not available.")
-        self.tokenizer = AutoTokenizer.from_pretrained(base_repo_or_path, trust_remote_code=trust_remote_code)
+        self.tokenizer = AutoTokenizer.from_pretrained(base_repo_or_path, token=True, trust_remote_code=trust_remote_code)
         if self.tokenizer.pad_token is None: self.tokenizer.pad_token = self.tokenizer.eos_token
+        
+        # Configure 4-bit quantization if requested
+        quantization_config = None
+        if use_4bit:
+            print("Loading model with 4-bit quantization for memory efficiency...", flush=True)
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
+            )
+            torch_dtype = torch.float16  # Force float16 for 4-bit
+        
         self.model = AutoModelForCausalLM.from_pretrained(
-            base_repo_or_path, device_map=device_map,
+            base_repo_or_path, 
+            device_map=device_map,
+            quantization_config=quantization_config,
             torch_dtype=getattr(torch, torch_dtype) if isinstance(torch_dtype,str) else torch_dtype,
-            trust_remote_code=trust_remote_code, low_cpu_mem_usage=True
+            token=True, 
+            trust_remote_code=trust_remote_code, 
+            low_cpu_mem_usage=True
         )
-        self.model = PeftModel(self.model)
+        
+        # Prepare model for k-bit training if using quantization
+        if use_4bit:
+            self.model = prepare_model_for_kbit_training(self.model)
+        
         self.adapters_loaded: Dict[str,str] = {}
+        self._peft_model = None  # Will be set when first adapter is loaded
     def load_adapter(self, adapter_path: str, name: Optional[str]=None):
         name = name or os.path.basename(adapter_path.rstrip("/"))
-        self.model.load_adapter(adapter_path, adapter_name=name)
+        if self._peft_model is None:
+            # First adapter: wrap base model with PeftModel
+            self._peft_model = PeftModel.from_pretrained(self.model, adapter_path, adapter_name=name)
+            self.model = self._peft_model
+        else:
+            # Subsequent adapters: load onto existing PeftModel
+            self.model.load_adapter(adapter_path, adapter_name=name)
         self.adapters_loaded[name] = adapter_path
     def set_adapter(self, name: Optional[str]): self.model.set_adapter(name)
     def device(self): return next(self.model.parameters()).device
@@ -185,6 +213,11 @@ class LLMAgent(AgentBase):
                     prev_t = t - 1; token_id = int(ids[t].item())
                     lp += float(logprobs[i, prev_t, token_id].item())
                 logp_list.append(lp)
+            # Numerical stability: clamp and check for invalid values
+            logp_list = [max(min(lp, 100.0), -100.0) for lp in logp_list]
+            if any(math.isnan(lp) or math.isinf(lp) for lp in logp_list):
+                # Fallback: uniform distribution
+                return [0.0]*len(candidates), [1.0/len(candidates)]*len(candidates)
             mx = max(logp_list); probs = [math.exp(lp - mx) for lp in logp_list]; s = sum(probs)
             probs = [p/s for p in probs] if s>0 else [1.0/len(candidates)]*len(candidates)
         return logp_list, probs
@@ -216,7 +249,22 @@ class LLMAgent(AgentBase):
                 lp = lp + logprobs[i, t-1, ids[t]]
             logp_seq.append(lp)
         logp = torch.stack(logp_seq, dim=0)        # [B]
+        
+        # Numerical stability: clamp logp to prevent overflow/underflow in softmax
+        logp = torch.clamp(logp, min=-100.0, max=100.0)
+        
+        # Check for NaN/inf before softmax
+        if torch.isnan(logp).any() or torch.isinf(logp).any():
+            # Fallback: uniform distribution
+            print(f"WARNING: Invalid logp detected, using uniform distribution", flush=True)
+            logp = torch.zeros_like(logp)
+        
         probs = torch.softmax(logp, dim=-1)        # [B]
+        
+        # Additional safety: ensure probs are valid for multinomial
+        if torch.isnan(probs).any() or torch.isinf(probs).any() or (probs < 0).any():
+            print(f"WARNING: Invalid probs after softmax, using uniform", flush=True)
+            probs = torch.ones_like(probs) / probs.size(0)
 
         # sample/greedy on label set
         if self.temperature > 0:

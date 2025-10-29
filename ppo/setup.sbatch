@@ -4,11 +4,11 @@
 #SBATCH -t 720                    # Duration of the job (Ex: 720 mins = 12 hours)
 #SBATCH --mem-per-cpu=10G         # Increased memory for RL training
 #SBATCH -q coc-ice
-#SBATCH -o../logs/ppo/Report-%j.out        # Output to ppo logs directory
+#SBATCH -o logs/ppo/Report-%j.out        # Output to ppo logs directory (relative to project root)
 #SBATCH --mail-type=BEGIN,END,FAIL   # Mail preferences
 #SBATCH --mail-user=yli3776@gatech.edu  # E-mail address for notifications
 
-cd /home/hice1/yli3776/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker/ppo
+cd /home/hice1/yli3776/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker
 
 # Load modules
 module load anaconda3
@@ -35,6 +35,6 @@ echo "Python version: $(python --version)"
 echo "Conda environment: $CONDA_DEFAULT_ENV"
 nvidia-smi
 
-# Run PPO training
-echo "Starting PPO training..."
-python train_ppo.py
+# Run PPO training from project root so `ppo` is an importable package
+echo "Starting PPO training (module mode)..."
+python -m ppo.train_ppo
