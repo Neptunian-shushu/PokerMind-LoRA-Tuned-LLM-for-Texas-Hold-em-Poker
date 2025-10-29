@@ -1,5 +1,5 @@
 // Backend(ai service) API URL
-const API_URL = 'http://localhost:3001';
+const API_BASE = import.meta.env.VITE_API_URL;
 
 // construct prompt
 const buildPreflopStatePrompt = (gameState, playerId) => {
@@ -21,7 +21,6 @@ const buildPreflopStatePrompt = (gameState, playerId) => {
 Here is a game summary:
 
 The small blind is ${gameState.smallBlind} chips and the big blind is ${gameState.bigBlind} chips. Everyone started with ${startingChips} chips.
-The player positions involved in this game are: ${gameState.players.map(p => p.name).join(', ')}.
 In this hand, your position is ${position}, and your holding is [${hand}].
 
 Before the flop:
@@ -32,29 +31,12 @@ To remind you, the current pot size is ${gameState.pot} chips, and your holding 
 Your remaining chips: ${player.chips} chips.
 ${toCall > 0 ? `You need to call ${toCall} chips to stay in the hand.` : 'You can check or bet.'}
 
-Available Actions:
-${toCall === 0 ? '- CHECK (cost: 0 chips)' : '- CALL ' + toCall + ' chips'}
-${toCall > 0 ? '- FOLD (forfeit the hand)' : ''}
-- RAISE (minimum raise: ${gameState.bigBlind} chips on top of the call amount)
-- ALL-IN (bet all ${player.chips} remaining chips)
-
 Please respond with ONLY a JSON object in the following format:
 {
   "action": "FOLD|CHECK|CALL|RAISE|ALL-IN",
-  "raiseAmount": <number if action is RAISE, 0 otherwise>,
-  "reasoning": "<brief explanation of your decision based on hand strength, position, pot odds, and opponent actions>",
-  "confidence": <number 0-100>
+  "raiseAmount": <number if action is RAISE, 0 otherwise>
 }
-
-Consider factors like:
-- Hand strength in 6-handed play
-- Your position relative to the button
-- Pot odds and implied odds
-- Stack-to-pot ratio
-- Opponent betting patterns and tendencies
-- Expected value of each action
-
-Respond ONLY with the JSON object, no other text.`;
+`;
 
   return prompt;
 };
@@ -157,15 +139,14 @@ export const getAIDecision = async (gameState, playerId) => {
 
   try {
     const prompt = buildPreflopStatePrompt(gameState, playerId);
+    console.log('Prompt:', prompt);
 
-    console.log('Calling backend API for AI decision...');
-
-    const response = await fetch(`${API_URL}/api/ai-decision`, {
+    const response = await fetch(`${API_BASE}/predict`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ prompt })
+      body: JSON.stringify({ instruction: prompt })
     });
 
     if (!response.ok) {
@@ -173,7 +154,10 @@ export const getAIDecision = async (gameState, playerId) => {
     }
 
     const data = await response.json();
-    const content = data.content || '';
+    console.log('AI Response Data:', data);
+    const content = data.predicted_action || '';
+
+    console.log('AI Response:', content);
 
     const jsonContent = extractJSON(content);
     const parsed = JSON.parse(jsonContent);
