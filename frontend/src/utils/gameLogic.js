@@ -127,32 +127,27 @@ const getPositionName = (index, totalPlayers) => {
 export const isRoundComplete = (gameState) => {
   const activePlayers = gameState.players.filter(p => !p.isFolded);
   
-  // 如果只剩一个玩家，回合立即结束
   if (activePlayers.length === 1) {
     return true;
   }
   
-  // 检查所有活跃玩家是否都已行动（除了小盲和大盲的初始状态）
   const allActed = activePlayers.every(p => p.action !== '' && p.action !== 'SB' && p.action !== 'BB');
   
-  // 检查所有活跃玩家的下注是否相同
   const allBetsEqual = activePlayers.every(p => p.totalBetThisRound === gameState.currentBet);
-  // 当存在全下（筹码为0）的玩家时，允许该玩家不与当前最大下注量相等，也视作筹码结清
   const allBetsSettled = activePlayers.every(p => p.totalBetThisRound === gameState.currentBet || p.chips === 0);
 
-  // 如果在河牌轮且所有玩家都check了（或者全都采取了行动且下注相同），强制进入摊牌
   const allChecked = activePlayers.every(p => p.action === 'Check');
   const isRiverRound = gameState.phase === BETTING_ROUNDS.RIVER;
   
-  // 回合结束条件：
-  // 1. 所有玩家都行动过且下注相同
-  // 2. 在河牌轮且所有人都check
   return (allActed && (allBetsEqual || allBetsSettled)) || (isRiverRound && allChecked);
 };
 
 // player action
 export const playerAction = (gameState, action, raiseAmount = 0) => {
-  const newState = { ...gameState };
+  const newState = { 
+    ...gameState,
+    players: [...gameState.players]  // create a new array to ensure React detects changes
+  };
   const player = { ...newState.players[newState.currentPlayerIndex] };
   
   switch (action) {
@@ -225,18 +220,19 @@ export const playerAction = (gameState, action, raiseAmount = 0) => {
 
 // move to next player
 export const moveToNextPlayer = (gameState) => {
-  const newState = { ...gameState };
-  let nextIndex = (newState.currentPlayerIndex + 1) % newState.players.length;
+  let nextIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
   
   // skip folded players
-  while (newState.players[nextIndex].isFolded) {
-    nextIndex = (nextIndex + 1) % newState.players.length;
+  while (gameState.players[nextIndex].isFolded) {
+    nextIndex = (nextIndex + 1) % gameState.players.length;
   }
   
-  newState.currentPlayerIndex = nextIndex;
-  
-  // reset current player's bet display
-  newState.players = newState.players.map(p => ({ ...p, bet: 0 }));
+  // create new state with new players array and reset bet display
+  const newState = {
+    ...gameState,
+    currentPlayerIndex: nextIndex,
+    players: gameState.players.map(p => ({ ...p, bet: 0 }))
+  };
   
   return newState;
 };
@@ -269,7 +265,7 @@ export const getAvailableActions = (gameState) => {
   return {
     actions,
     toCall,
-    minRaise: gameState.bigBlind,
+    minRaise: 1,
     maxRaise: player.chips - toCall
   };
 };
@@ -292,15 +288,18 @@ const getSuitSymbol = (suit) => {
 
 // 推进到下一个回合
 export const advanceToNextRound = (gameState) => {
-  const newState = { ...gameState };
-  
   // 重置玩家状态
-  newState.players = newState.players.map(p => ({
+  const resetPlayers = gameState.players.map(p => ({
     ...p,
     bet: 0,
     totalBetThisRound: 0,
     action: ''
   }));
+  
+  const newState = { 
+    ...gameState,
+    players: resetPlayers
+  };
   
   // 重置回合状态
   newState.currentBet = 0;

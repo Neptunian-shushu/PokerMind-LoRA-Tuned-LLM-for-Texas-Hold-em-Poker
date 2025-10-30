@@ -45,11 +45,11 @@ function App() {
     try {
       // get AI decision
       const decision = await getAIDecision(state, state.currentPlayerIndex);
-      
+
       setMessage(`${currentPlayer.name} decides to ${decision.action.toUpperCase()}${decision.raiseAmount > 0 ? ' $' + decision.raiseAmount : ''}`);
       
       // execute AI action
-      let newState = playerAction(state, decision.action, decision.raiseAmount);
+      let newState = playerAction(state, decision.action.toLowerCase(), decision.raiseAmount);
       
       // check if round is complete
       if (isRoundComplete(newState)) {

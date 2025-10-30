@@ -31,11 +31,8 @@ To remind you, the current pot size is ${gameState.pot} chips, and your holding 
 Your remaining chips: ${player.chips} chips.
 ${toCall > 0 ? `You need to call ${toCall} chips to stay in the hand.` : 'You can check or bet.'}
 
-Please respond with ONLY a JSON object in the following format:
-{
-  "action": "FOLD|CHECK|CALL|RAISE|ALL-IN",
-  "raiseAmount": <number if action is RAISE, 0 otherwise>
-}
+Decide on an action based on the strength of your hand on this board, your position, and actions before you. Do not explain your answer.
+Your optimal action is:
 `;
 
   return prompt;
@@ -94,52 +91,10 @@ const buildActionHistory = (gameState, playerId) => {
   return actions.length > 0 ? actions.join(', then ') + '.' : 'No actions yet.';
 };
 
-const extractJSON = (content) => {
-  const jsonMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (jsonMatch) {
-    return jsonMatch[1].trim();
-  }
-  return content.trim();
-};
-
 // call backend API to get AI decision
 export const getAIDecision = async (gameState, playerId) => {
-  // Helper: normalize action strings from the model to our internal action keys
-  const normalizeAction = (raw) => {
-    const a = String(raw || '').trim().toLowerCase();
-    if (a === 'fold') return 'fold';
-    if (a === 'check') return 'check';
-    if (a === 'call') return 'call';
-    if (a === 'raise') return 'raise';
-    if (a === 'all-in' || a === 'all in' || a === 'allin') return 'all-in';
-    // Default safe choice when unknown
-    return 'check';
-  };
-
-  // Simple rule-based fallback when API is unavailable or returns invalid data
-  const fallbackDecision = () => {
-    const player = gameState.players[playerId];
-    const toCall = Math.max(0, gameState.currentBet - player.totalBetThisRound);
-    // If cannot cover the call, go all-in (short call)
-    if (toCall > 0 && player.chips <= toCall) {
-      return { action: 'all-in', raiseAmount: 0, reasoning: 'Short stack all-in to call', confidence: 60 };
-    }
-    // If nothing to call, check most of the time
-    if (toCall === 0) {
-      return { action: 'check', raiseAmount: 0, reasoning: 'Free check', confidence: 70 };
-    }
-    // Cheap call threshold
-    const cheap = player.chips * 0.05;
-    if (toCall <= cheap) {
-      return { action: 'call', raiseAmount: 0, reasoning: 'Price is cheap to continue', confidence: 55 };
-    }
-    // Otherwise fold conservatively
-    return { action: 'fold', raiseAmount: 0, reasoning: 'Conservative fold vs large bet', confidence: 55 };
-  };
-
   try {
     const prompt = buildPreflopStatePrompt(gameState, playerId);
-    console.log('Prompt:', prompt);
 
     const response = await fetch(`${API_BASE}/predict`, {
       method: 'POST',
@@ -154,29 +109,20 @@ export const getAIDecision = async (gameState, playerId) => {
     }
 
     const data = await response.json();
-    console.log('AI Response Data:', data);
-    const content = data.predicted_action || '';
 
-    console.log('AI Response:', content);
+    const action = data.action;
+    const raiseAmount = Number(data.raiseAmount) || 0;
 
-    const jsonContent = extractJSON(content);
-    const parsed = JSON.parse(jsonContent);
-
-    const action = normalizeAction(parsed.action);
-    const raiseAmount = Number(parsed.raiseAmount) || 0;
-
-    console.log('AI Decision:', { action: parsed.action, normalized: action, raiseAmount });
+    console.log('AI Decision:', { action, raiseAmount });
 
     return {
       action,
-      raiseAmount,
-      reasoning: parsed.reasoning || '',
-      confidence: parsed.confidence || 50
+      raiseAmount
     };
   } catch (error) {
     console.error('Error calling backend API:', error);
-    console.log('Falling back to rule-based AI...');
-    return fallbackDecision();
+    alert('Backend server is not connected, please retry.');
+    throw new Error('Backend connection failed');
   }
 };
 
