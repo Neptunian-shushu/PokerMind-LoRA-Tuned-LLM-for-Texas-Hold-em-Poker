@@ -26,8 +26,8 @@ pkill -f uvicorn
 Connect Frontend with Backend
 ```bash
 # In your local computer
-# This command creates an SSH tunnel that maps your local port 8000 to
+# This command creates an SSH tunnel that maps your local port 8001 to
 # port 8000 on the remote GPU node (e.g. atl1-1-03-013-3-0) through the ICE login node.
-ssh -L 8000:atl1-1-03-013-3-0:8000 mjin93@login-ice.pace.gatech.edu
+ssh -L 8001:atl1-1-03-012-18-0:8000 mjin93@login-ice.pace.gatech.edu
 npm run dev
 ```
