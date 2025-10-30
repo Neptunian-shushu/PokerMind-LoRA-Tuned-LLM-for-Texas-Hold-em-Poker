@@ -38,3 +38,5 @@ venv/
 
 # VSCode
 .vscode/
+
+fastapi.log
