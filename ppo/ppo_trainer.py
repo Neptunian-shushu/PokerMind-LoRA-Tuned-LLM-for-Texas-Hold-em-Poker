@@ -96,9 +96,10 @@ class PPOTrainer:
                 if getattr(agent, "_controller", None) is not None:
                     agent._controller.set_adapter(agent._adapter_name)
 
-                # Build prompt + strict tail
+                # Build prompt in PokerBench format (### Instruction / ### Response)
                 print(f"    Building prompt for player {pid}...", flush=True)
-                prompt = state.get_llm_prompt(pid) + agent._tail_instruction()
+                game_description = state.get_llm_prompt(pid)
+                prompt = agent._format_prompt(game_description)
                 # logp_vec[B], prob_vec[B], choice_idx, logp_chosen
                 print(f"    Scoring candidates for player {pid}...", flush=True)
                 logp_vec, prob_vec, idx, logp_chosen = agent.score_candidates_train(

@@ -20,7 +20,7 @@ class PPOConfig:
     # Training loop
     num_episodes: int = 10000
     steps_per_episode: int = 50
-    learning_rate: float = 1e-4
+    learning_rate: float = 1e-5
     log_frequency: int = 10
     save_frequency: int = 1000
     save_adapter_every: int = 1000

@@ -17,14 +17,14 @@
     "rl_adapter_save_dir": "/home/hice1/yli3776/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker/ppo/rl_adapters/",
     "num_episodes": 100,
     "steps_per_episode": 20,
-    "learning_rate": 1e-06,
+    "learning_rate": 1e-05,
     "log_frequency": 5,
     "save_frequency": 50,
     "save_adapter_every": 1000,
     "eval_frequency": 25,
-    "eval_episodes": 10,
+    "eval_episodes": 100,
     "num_players": 2,
-    "starting_stack": 100.0,
+    "starting_stack": 10.0,
     "small_blind": 0.5,
     "big_blind": 1.0,
     "max_seq_len": 512,
@@ -37,22 +37,22 @@
     "max_grad_norm": 1.0
   },
   "last_log": {
-    "steps": 1,
+    "steps": 3,
     "stacks_init": [
-      100.0,
-      100.0
+      10.0,
+      10.0
     ],
     "stacks_final": [
-      101.0,
-      99.0
+      15.0,
+      5.0
     ],
     "result": {
       "winners": [
         0
       ],
       "win_type": "showdown",
-      "pot": 2.0,
-      "pot_share": 2.0,
+      "pot": 10.0,
+      "pot_share": 10.0,
       "winning_hand": "Two Pair",
       "final_board": [
         "Ace Of Club",
@@ -73,8 +73,8 @@
       ]
     },
     "terminal_rewards": [
-      1.0,
-      -1.0
+      5.0,
+      -5.0
     ]
   }
 }

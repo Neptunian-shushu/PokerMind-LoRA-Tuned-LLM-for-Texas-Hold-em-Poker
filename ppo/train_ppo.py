@@ -20,7 +20,7 @@ def build_agents_and_controller(cfg: PPOConfig):
         torch_dtype=cfg.torch_dtype,
         device_map=cfg.device_map,
         trust_remote_code=True,
-        use_4bit=False,  # Disable 4-bit quantization - it was causing accuracy drop
+        use_4bit=False,
     )
     for path, name in zip(cfg.adapter_paths, cfg.adapter_register_names):
         ctl.load_adapter(path, name=name)
@@ -48,62 +48,34 @@ def set_global_seeds(seed: int):
         torch.cuda.manual_seed_all(seed)
 
 # ---- evaluation: PokerBench accuracy (action label match) ----
-def _format_pb_prompt(inst: str) -> str:
-    return f"### Instruction:\n{inst}\n\n### Response:\n"
+def _format_prompt(instruction: str) -> str:
+    """Format prompt to match SFT training format: ### Instruction / ### Response"""
+    return f"### Instruction:\n{instruction}\n\n### Response:\n"
 
-def _tail_instruction() -> str:
-    return (
-        "\n\nIMPORTANT:\n"
-        "Reply with exactly ONE token from this set (lowercase, no explanation): {"
-        + ",".join(DISCRETE_ACTIONS)
-        + "}\nOutput:"
-    )
-
-def _parse_pb_target_to_label(text: str) -> str:
-    t = (text or "").strip().lower().split()
-    if not t:
-        return "fold"
-    a = t[0]
-    if a in ("fold", "check", "call"):
-        return a
-    if a == "bet":
-        return "bet_0.50pot"
-    if a == "raise":
-        return "raise_1.00pot"
-    return "fold"
-
-@torch.no_grad()
-def _score_candidates(tokenizer, model, prompt: str, candidates):
-    device = next(model.parameters()).device
-    enc_p = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512, padding=False)
-    prompt_ids = enc_p["input_ids"][0].to(device)
-    prompt_len = prompt_ids.shape[0]
-    texts = [prompt + " " + c for c in candidates]
-    enc = tokenizer(texts, return_tensors="pt", padding=True, truncation=True, max_length=512)
-    input_ids = enc["input_ids"].to(device)
-    attn = enc.get("attention_mask", None)
-    if attn is not None:
-        attn = attn.to(device)
-    logits = model(input_ids=input_ids, attention_mask=attn, use_cache=False).logits
-    logprobs = torch.log_softmax(logits, dim=-1)
-    logp = []
-    for i in range(input_ids.size(0)):
-        ids = input_ids[i]
-        valid = int(attn[i].sum().item()) if attn is not None else ids.size(0)
-        start = min(prompt_len, valid - 1)
-        s = 0.0
-        for t in range(start, valid):
-            prev = t - 1
-            tok = int(ids[t].item())
-            s += float(logprobs[i, prev, tok].item())
-        logp.append(s)
-    mx = max(logp)
-    probs = [np.exp(v - mx) for v in logp]
-    s = float(sum(probs))
-    probs = [p / s for p in probs] if s > 0 else [1.0 / len(candidates)] * len(candidates)
-    return probs
+def extract_action_and_amount(output_text):
+    """
+    Extract action and amount from model output (matching SFT evaluation).
+    Returns: (action, amount) tuple
+    """
+    tokens = output_text.strip().lower().split()
+    if not tokens:
+        return None, None
+    action = tokens[0]
+    amount = None
+    if action in ['bet', 'raise', 'call'] and len(tokens) > 1:
+        try:
+            amount = float(tokens[1])
+        except (ValueError, IndexError):
+            pass
+    return action, amount
 
 def eval_pokerbench_accuracy(ctl: SharedLLMController, adapter_name: str, max_samples: int = 1000) -> float:
+    """
+    Evaluate model accuracy using generation (matching SFT evaluation method).
+    Uses TRAIN split with same index ranges as SFT:
+    - Postflop: indices 0-1000
+    - Preflop: indices 10000 onwards
+    """
     try:
         from datasets import load_dataset
     except Exception:
@@ -116,47 +88,87 @@ def eval_pokerbench_accuracy(ctl: SharedLLMController, adapter_name: str, max_sa
     mdl = ctl.model.eval()
 
     ds = load_dataset("RZ412/PokerBench")
+    # Match SFT evaluation: use TEST split
     test = ds["test"]
+
+    # Use same index ranges as SFT evaluation
+    # Postflop: first 1000 samples (indices 0-999)
+    postflop_indices = list(range(0, min(1000, len(test))))
+    # Preflop: from index 10000 onwards
+    preflop_start = 10000
+    preflop_indices = list(range(preflop_start, len(test))) if preflop_start < len(test) else []
     
-    # Helper to detect if a sample is preflop
-    def is_preflop(instruction):
-        """Check if instruction is a preflop scenario (no community cards)"""
-        inst_lower = instruction.lower()
-        # Postflop scenarios contain phrases about community cards being dealt
-        if "the flop comes" in inst_lower or "the turn comes" in inst_lower or "the river comes" in inst_lower:
-            return False  # Postflop
-        return True  # Preflop
-    
-    # Separate samples into preflop and postflop
-    preflop_indices = []
-    postflop_indices = []
-    for i in range(len(test)):
-        if is_preflop(test[i]["instruction"]):
-            preflop_indices.append(i)
-        else:
-            postflop_indices.append(i)
-    
+    # Helper parsers to match SFT behavior
+    def _parse_pb_target_to_label(target_text: str):
+        # Return action string (e.g., 'fold','call','bet','raise','check')
+        a, _ = extract_action_and_amount(target_text)
+        return a
+
+    def _parse_generated_action(gen_text: str):
+        a, _ = extract_action_and_amount(gen_text)
+        return a
+
     # Evaluate both categories separately (max_samples each)
-    def coarse(lbl):
-        if lbl.startswith("bet_"): return "bet"
-        if lbl.startswith("raise_"): return "raise"
-        return lbl
-    
     def eval_subset(indices, name):
         n = min(max_samples, len(indices))
-        correct = 0
+        action_correct = 0
+        exact_match_correct = 0
+        device = next(mdl.parameters()).device
+        
         for i in range(n):
             idx = indices[i]
             inst = test[idx]["instruction"]
             out = test[idx]["output"]
-            target_label = _parse_pb_target_to_label(out)
-            prompt = _format_pb_prompt(inst)
-            probs = _score_candidates(tok, mdl, prompt, DISCRETE_ACTIONS)
-            pred = DISCRETE_ACTIONS[int(np.argmax(probs))]
-            if coarse(pred) == coarse(target_label):
-                correct += 1
-        acc = (correct / n) * 100.0 if n > 0 else -1.0
-        print(f"[eval] {name} accuracy: {acc:.2f}% ({correct}/{n} samples)")
+            
+            # Get expected action and amount (SFT-style)
+            expected_action, expected_amount = extract_action_and_amount(out)
+
+            # Format prompt (matching SFT training format)
+            prompt = _format_prompt(inst)
+            
+            try:
+                # Generate response using same settings as SFT evaluation
+                inputs = tok(prompt, return_tensors="pt", return_attention_mask=True).to(device)
+                with torch.no_grad():
+                    outputs = mdl.generate(
+                        input_ids=inputs['input_ids'],
+                        attention_mask=inputs['attention_mask'],
+                        max_length=inputs['input_ids'].shape[1] + 50,
+                        temperature=0.1,
+                        do_sample=True,
+                        top_p=0.95,
+                        pad_token_id=tok.pad_token_id,
+                        eos_token_id=tok.eos_token_id,
+                        use_cache=True
+                    )
+                
+                response = tok.decode(outputs[0], skip_special_tokens=True)
+                generated_part = response[len(prompt):].strip()
+                
+                # Extract generated action and amount
+                gen_action, gen_amount = extract_action_and_amount(generated_part)
+
+                # Compare actions (action-level accuracy)
+                if expected_action is not None and gen_action == expected_action:
+                    action_correct += 1
+                    # Check exact match: for bet/raise/call verify amounts, for fold/check just action match is exact
+                    if expected_action in ['bet', 'raise', 'call']:
+                        if expected_amount is not None and gen_amount is not None:
+                            if abs(expected_amount - gen_amount) < 0.01:
+                                exact_match_correct += 1
+                        elif expected_amount is None and gen_amount is None:
+                            exact_match_correct += 1
+                    else:
+                        # For fold/check, action match = exact match (no amount to verify)
+                        exact_match_correct += 1
+                    
+            except Exception as e:
+                # On error, count as incorrect
+                continue
+        
+        acc = (action_correct / n) * 100.0 if n > 0 else -1.0
+        exact_pct = (exact_match_correct / n) * 100.0 if n > 0 else 0.0
+        print(f"[eval] {name} action-accuracy: {acc:.2f}% ({action_correct}/{n} samples), exact-match: {exact_pct:.2f}% ({exact_match_correct}/{n})")
         return acc, n
     
     preflop_acc, preflop_n = eval_subset(preflop_indices, "Preflop")
@@ -180,6 +192,14 @@ def main(cfg: PPOConfig = DEFAULT_CONFIG):
     rc = RewardCalculator(big_blind=cfg.big_blind)
     trainer = PPOTrainer(cfg, reward_calculator=rc)
     agents, ctl = build_agents_and_controller(cfg)
+
+    # Baseline evaluation before any PPO updates (to match SFT baseline)
+    try:
+        name0 = cfg.seat_adapter_names[0]
+        print("[eval] Baseline (episode 0) PokerBench accuracy:")
+        _ = eval_pokerbench_accuracy(ctl, name0, max_samples=min(1000, getattr(cfg, "eval_episodes", 100)))
+    except Exception as e:
+        print(f"[eval] Baseline eval skipped due to error: {e}")
 
     t0 = time.time()
     print(f"Starting training loop: {cfg.num_episodes} episodes", flush=True)
