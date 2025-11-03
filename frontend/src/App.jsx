@@ -11,15 +11,29 @@ function App() {
   const [message, setMessage] = useState('');
   const [gameOver, setGameOver] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
+  const [previousDealerPosition, setPreviousDealerPosition] = useState(null);
+  const [playerChips, setPlayerChips] = useState([100, 100, 100, 100, 100, 100]); // Store each player's chips
+
+  // Save player chips when game ends
+  const savePlayerChips = useCallback((finalState) => {
+    if (finalState && finalState.players) {
+      const finalChips = finalState.players.map(player => player.chips);
+      setPlayerChips(finalChips);
+    }
+  }, []);
 
   // initialize game
   const startNewGame = useCallback(() => {
-    const newGame = initializeGame(['You', 'AI Bot 1', 'AI Bot 2', 'AI Bot 3', 'AI Bot 4', 'AI Bot 5'], 1000, 10, 20);
+    // Use saved player chips, or 100 if first game or player has 0 chips
+    const startingChips = playerChips.map(chips => chips > 0 ? chips : 100);
+    const newGame = initializeGame(['You', 'AI Bot 1', 'AI Bot 2', 'AI Bot 3', 'AI Bot 4', 'AI Bot 5'], startingChips, 0.5, 1, previousDealerPosition);
     setGameState(newGame);
     setGameOver(false);
     setGameStarted(true);
     setMessage('Game started! Waiting for action...');
-  }, []);
+    // Store dealer position for next game
+    setPreviousDealerPosition(newGame.dealerPosition);
+  }, [previousDealerPosition, playerChips]);
 
   // process AI player's turn
   const processAITurn = useCallback(async (state) => {
@@ -56,11 +70,11 @@ function App() {
         const result = determineWinner(newState);
         
         if (result.isFinished) {
-          // 游戏结束（所有玩家弃牌或摊牌）
+          // Game ended (all players folded or showdown)
           const updatedState = result.gameState;
           const winningPlayer = updatedState.players[result.winnerId];
 
-          // 仅显示三条信息：赢家、赢得金额、你的最终筹码（含收益）
+          // Only display three pieces of info: winner, amount won, your final chips (including gains)
           const winnerStats = result.playerStats?.find(p => p.id === result.winnerId);
           const amountWon = winnerStats?.netGain ?? updatedState.pot;
           const yourBaseChips = updatedState.players[0]?.chips ?? 0;
@@ -75,14 +89,15 @@ function App() {
           setMessage(resultMessage.join(' | '));
           setGameOver(true);
           setIsProcessing(false);
+          savePlayerChips(result.gameState);
           return result.gameState;
         } else if (newState.phase === BETTING_ROUNDS.SHOWDOWN) {
-          // 到达摊牌阶段 - 处理摊牌结果
+          // Reached showdown phase - process showdown result
           const result = determineWinner(newState);
           const updatedState = result.gameState;
           const winningPlayer = updatedState.players[result.winnerId];
 
-          // 仅显示三条信息：赢家、赢得金额、你的最终筹码（含收益）
+          // Only display three pieces of info: winner, amount won, your final chips (including gains)
           const winnerStats = result.playerStats?.find(p => p.id === result.winnerId);
           const amountWon = winnerStats?.netGain ?? updatedState.pot;
           const yourBaseChips = updatedState.players[0]?.chips ?? 0;
@@ -97,13 +112,14 @@ function App() {
           setMessage(resultMessage.join(' | '));
           setGameOver(true);
           setIsProcessing(false);
+          savePlayerChips(result.gameState);
           return result.gameState;
         } else {
-          // 进入下一个回合
+          // Advance to next betting round
           console.log(`=== ${newState.phase} Complete - Moving to Next Round ===`);
           newState = advanceToNextRound(newState);
 
-          // 如果推进后是摊牌，立即结算，不再等待额外一次"Check"
+          // If advancing leads to showdown, settle immediately without waiting for extra "Check"
           if (newState.phase === BETTING_ROUNDS.SHOWDOWN) {
             const sdResult = determineWinner(newState);
             const updatedState = sdResult.gameState;
@@ -123,6 +139,7 @@ function App() {
             setMessage(resultMessage.join(' | '));
             setGameOver(true);
             setIsProcessing(false);
+            savePlayerChips(sdResult.gameState);
             return sdResult.gameState;
           }
 
@@ -144,7 +161,7 @@ function App() {
       setIsProcessing(false);
       return state;
     }
-  }, [gameOver]);
+  }, [gameOver, savePlayerChips]);
 
   // when game state changes and it's AI's turn, automatically process AI turn
   useEffect(() => {
@@ -152,7 +169,7 @@ function App() {
 
     const currentPlayer = gameState.players[gameState.currentPlayerIndex];
     
-    // 更新游戏状态显示
+    // Update game status display
     const updateGameStatus = () => {
       const activePlayers = gameState.players.filter(p => !p.isFolded);
       let statusMessage = '';
@@ -217,7 +234,7 @@ function App() {
       const result = determineWinner(newState);
       
       if (result.isFinished) {
-        // 游戏结束（包括弃牌和摊牌的情况）
+        // Game ended (including fold and showdown cases)
         const updatedState = result.gameState;
         const winningPlayer = updatedState.players[result.winnerId];
 
@@ -236,9 +253,10 @@ function App() {
         setGameOver(true);
         setGameState(updatedState);
         setIsProcessing(false);
+        savePlayerChips(updatedState);
         return;
       } else if (newState.phase === BETTING_ROUNDS.SHOWDOWN) {
-        // 到达摊牌阶段 - 处理摊牌结果（仅显示三条信息）
+        // Reached showdown phase - process showdown result (only display three pieces of info)
         const result = determineWinner(newState);
         const updatedState = result.gameState;
         const winningPlayer = updatedState.players[result.winnerId];
@@ -258,13 +276,14 @@ function App() {
         setGameOver(true);
         setGameState(updatedState);
         setIsProcessing(false);
+        savePlayerChips(updatedState);
         return;
       } else {
-        // 进入下一个回合
+        // Advance to next betting round
         console.log(`=== ${newState.phase} Complete - Moving to Next Round ===`);
         newState = advanceToNextRound(newState);
 
-        // 如果推进后是摊牌，立即结算，不再等待额外一次"Check"
+        // If advancing leads to showdown, settle immediately without waiting for extra "Check"
         if (newState.phase === BETTING_ROUNDS.SHOWDOWN) {
           const sdResult = determineWinner(newState);
           const updatedState = sdResult.gameState;
@@ -285,6 +304,7 @@ function App() {
           setGameOver(true);
           setGameState(updatedState);
           setIsProcessing(false);
+          savePlayerChips(updatedState);
           return;
         }
 
@@ -333,11 +353,11 @@ function App() {
                   </div>
                   <div className="setting-item">
                     <span className="setting-icon">💰</span>
-                    <span>Starting Chips: $1,000</span>
+                    <span>Starting Chips: $100</span>
                   </div>
                   <div className="setting-item">
                     <span className="setting-icon">🎰</span>
-                    <span>Blinds: $10 / $20</span>
+                    <span>Blinds: $0.5 / $1</span>
                   </div>
                 </div>
                 <button 

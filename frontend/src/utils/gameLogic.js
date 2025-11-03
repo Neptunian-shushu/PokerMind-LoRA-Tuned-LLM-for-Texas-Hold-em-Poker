@@ -56,19 +56,29 @@ export const dealCommunityCards = (deck, count) => {
 };
 
 // initialize game state
-export const initializeGame = (playerNames, startingChips, smallBlind, bigBlind) => {
+export const initializeGame = (playerNames, startingChips, smallBlind, bigBlind, previousDealerPosition = null) => {
   const deck = shuffleDeck(createDeck());
   const { playerHands, remainingDeck } = dealCards(deck, playerNames.length);
 
-  // determine positions - randomly select dealer
-  const dealerPosition = Math.floor(Math.random() * playerNames.length); // random dealer position
+  // determine positions - first game: random dealer, subsequent games: rotate clockwise
+  let dealerPosition;
+  if (previousDealerPosition === null) {
+    // First game: random dealer position
+    dealerPosition = Math.floor(Math.random() * playerNames.length);
+  } else {
+    // Subsequent games: rotate clockwise by one position
+    dealerPosition = (previousDealerPosition + 1) % playerNames.length;
+  }
   const sbPosition = (dealerPosition + 1) % playerNames.length; // small blind position
   const bbPosition = (dealerPosition + 2) % playerNames.length; // big blind position
   const firstToAct = (bbPosition + 1) % playerNames.length; // first to act player
   
+  // Support both single value or array for starting chips
+  const chipsArray = Array.isArray(startingChips) ? startingChips : Array(playerNames.length).fill(startingChips);
+  
   const players = playerNames.map((name, index) => {
     let initialBet = 0;
-    let initialChips = startingChips;
+    let initialChips = chipsArray[index] || chipsArray[0] || 100;
     
     if (index === sbPosition) {
       initialBet = smallBlind;
@@ -164,11 +174,53 @@ export const playerAction = (gameState, action, raiseAmount = 0) => {
         player.totalBetThisRound += callAmount;
         newState.pot += callAmount;
         player.action = 'Call';
+        
+        // In preflop, preserve SB/BB actions for other players who haven't acted
+        if (newState.phase === 'preflop') {
+          newState.players.forEach((p, idx) => {
+            if (idx !== newState.currentPlayerIndex && !p.isFolded) {
+              // If action is already SB or BB, keep it
+              if (p.action === 'SB' || p.action === 'BB') {
+                // Keep the existing blind action
+                newState.players[idx] = { ...p };
+              }
+              // If action is empty/undefined but player has blind bet, restore it
+              else if (p.action === '' || p.action === undefined) {
+                if (p.totalBetThisRound === newState.smallBlind) {
+                  newState.players[idx] = { ...p, action: 'SB' };
+                } else if (p.totalBetThisRound === newState.bigBlind) {
+                  newState.players[idx] = { ...p, action: 'BB' };
+                }
+              }
+            }
+          });
+        }
       }
       break;
       
     case 'check':
       player.action = 'Check';
+      
+      // In preflop, preserve SB/BB actions for other players who haven't acted
+      if (newState.phase === 'preflop') {
+        newState.players.forEach((p, idx) => {
+          if (idx !== newState.currentPlayerIndex && !p.isFolded) {
+            // If action is already SB or BB, keep it
+            if (p.action === 'SB' || p.action === 'BB') {
+              // Keep the existing blind action
+              newState.players[idx] = { ...p };
+            }
+            // If action is empty/undefined but player has blind bet, restore it
+            else if (p.action === '' || p.action === undefined) {
+              if (p.totalBetThisRound === newState.smallBlind) {
+                newState.players[idx] = { ...p, action: 'SB' };
+              } else if (p.totalBetThisRound === newState.bigBlind) {
+                newState.players[idx] = { ...p, action: 'BB' };
+              }
+            }
+          }
+        });
+      }
       break;
       
     case 'raise':
@@ -186,9 +238,27 @@ export const playerAction = (gameState, action, raiseAmount = 0) => {
         player.action = `Raise ${totalRaise}`;
         
         // reset other players' action status (except for folded players)
+        // In preflop, preserve SB/BB actions for players who haven't acted yet
         newState.players.forEach((p, idx) => {
           if (idx !== newState.currentPlayerIndex && !p.isFolded) {
-            newState.players[idx] = { ...p };
+            const updatedPlayer = { ...p };
+            // In preflop, preserve or restore blind actions
+            if (newState.phase === 'preflop') {
+              // If action is already SB or BB, keep it
+              if (p.action === 'SB' || p.action === 'BB') {
+                // Keep the existing blind action
+                updatedPlayer.action = p.action;
+              } 
+              // If action is empty/undefined but player has blind bet, restore it
+              else if (p.action === '' || p.action === undefined) {
+                if (p.totalBetThisRound === newState.smallBlind) {
+                  updatedPlayer.action = 'SB';
+                } else if (p.totalBetThisRound === newState.bigBlind) {
+                  updatedPlayer.action = 'BB';
+                }
+              }
+            }
+            newState.players[idx] = updatedPlayer;
           }
         });
       }
@@ -231,7 +301,22 @@ export const moveToNextPlayer = (gameState) => {
   const newState = {
     ...gameState,
     currentPlayerIndex: nextIndex,
-    players: gameState.players.map(p => ({ ...p, bet: 0 }))
+    players: gameState.players.map(p => {
+      const updatedPlayer = { ...p, bet: 0 };
+      // In preflop, preserve SB/BB actions for players who haven't acted yet
+      if (gameState.phase === 'preflop' && (p.action === 'SB' || p.action === 'BB')) {
+        // Keep the blind action
+        updatedPlayer.action = p.action;
+      } else if (gameState.phase === 'preflop' && (p.action === '' || p.action === undefined) && !p.isFolded) {
+        // Restore blind action if player hasn't acted
+        if (p.totalBetThisRound === gameState.smallBlind) {
+          updatedPlayer.action = 'SB';
+        } else if (p.totalBetThisRound === gameState.bigBlind) {
+          updatedPlayer.action = 'BB';
+        }
+      }
+      return updatedPlayer;
+    })
   };
   
   return newState;
@@ -270,12 +355,12 @@ export const getAvailableActions = (gameState) => {
   };
 };
 
-// 格式化手牌字符串
+// Format hand string
 export const formatHand = (cards) => {
   return cards.map(card => `${card.rank}${getSuitSymbol(card.suit)}`).join(' ');
 };
 
-// 获取花色符号
+// Get suit symbol
 const getSuitSymbol = (suit) => {
   const symbols = {
     hearts: '♥',
@@ -286,9 +371,9 @@ const getSuitSymbol = (suit) => {
   return symbols[suit] || '';
 };
 
-// 推进到下一个回合
+// Advance to next betting round
 export const advanceToNextRound = (gameState) => {
-  // 重置玩家状态
+  // Reset player states
   const resetPlayers = gameState.players.map(p => ({
     ...p,
     bet: 0,
@@ -301,33 +386,33 @@ export const advanceToNextRound = (gameState) => {
     players: resetPlayers
   };
   
-  // 重置回合状态
+  // Reset round state
   newState.currentBet = 0;
   newState.playersActedCount = 0;
   newState.lastRaiserIndex = -1;
   
-  // 处理不同回合的转换
+  // Handle transitions between different betting rounds
   switch(newState.phase) {
     case BETTING_ROUNDS.PREFLOP:
-      // 发放翻牌
+      // Deal the flop
       newState.communityCards = dealCommunityCards(newState.deck, 3);
       newState.phase = BETTING_ROUNDS.FLOP;
       break;
     
     case BETTING_ROUNDS.FLOP:
-      // 发放转牌
+      // Deal the turn
       newState.communityCards = [...newState.communityCards, ...dealCommunityCards(newState.deck, 1)];
       newState.phase = BETTING_ROUNDS.TURN;
       break;
     
     case BETTING_ROUNDS.TURN:
-      // 发放河牌
+      // Deal the river
       newState.communityCards = [...newState.communityCards, ...dealCommunityCards(newState.deck, 1)];
       newState.phase = BETTING_ROUNDS.RIVER;
       break;
     
     case BETTING_ROUNDS.RIVER:
-      // 河牌轮结束后直接进入摊牌，并确保所有未弃牌的玩家亮出手牌
+      // After river round, proceed to showdown and reveal all active players' cards
       newState.phase = BETTING_ROUNDS.SHOWDOWN;
       newState.players = newState.players.map(player => {
         if (!player.isFolded) {
@@ -341,7 +426,7 @@ export const advanceToNextRound = (gameState) => {
       break;
   }
   
-  // 设置第一个行动玩家（从庄家下一位开始）
+  // Set first player to act (starting from position after dealer)
   let nextToAct = (newState.dealerPosition + 1) % newState.players.length;
   while (newState.players[nextToAct].isFolded) {
     nextToAct = (nextToAct + 1) % newState.players.length;
@@ -351,26 +436,18 @@ export const advanceToNextRound = (gameState) => {
   return newState;
 };
 
-// 获取玩家手牌的描述
+// Get hand description
 const getHandDescription = (cards) => {
   return cards.map(card => `${card.rank}${getSuitSymbol(card.suit)}`).join(' ');
 };
 
-// 获取手牌的大小描述
-const getHandValueDescription = (value) => {
-  if (value >= 25) return '高牌对';
-  if (value >= 20) return '中等对子';
-  if (value >= 15) return '小对子';
-  return '高牌';
-};
-
-// 确定游戏结果
+// Determine game result
 export const determineWinner = (gameState) => {
   const activePlayers = gameState.players.filter(p => !p.isFolded);
   
-  // 创建玩家结果统计
+  // Create player result statistics
   const playerStats = activePlayers.map(player => {
-    const netGain = -player.totalBetThisRound; // 初始为负投入金额
+    const netGain = -player.totalBetThisRound; // Initially negative (amount invested)
     return {
       ...player,
       netGain,
@@ -378,16 +455,23 @@ export const determineWinner = (gameState) => {
     };
   });
   
-  // 情况1：只剩一个玩家（其他人都弃牌了）
+  // Case 1: Only one player left (all others folded)
   if (activePlayers.length === 1) {
     const winnerId = activePlayers[0].id;
-    // 更新所有玩家的手牌为可见
-    const updatedPlayers = gameState.players.map(player => ({
-      ...player,
-      cards: player.cards.map(card => ({ ...card, faceDown: false }))
-    }));
+    // Update all players' cards to visible and update winner's chips
+    const updatedPlayers = gameState.players.map(player => {
+      const playerCopy = {
+        ...player,
+        cards: player.cards.map(card => ({ ...card, faceDown: false }))
+      };
+      // Winner gets the pot
+      if (player.id === winnerId) {
+        playerCopy.chips += gameState.pot;
+      }
+      return playerCopy;
+    });
     
-    // 更新获胜者的净收益
+    // Update winner's net gain
     playerStats[0].netGain += gameState.pot;
 
     return {
@@ -408,15 +492,15 @@ export const determineWinner = (gameState) => {
     };
   }
   
-  // 情况2：如果是 showdown，需要比较7张牌中的最佳5张
+  // Case 2: If showdown, need to compare best 5 cards from 7 cards
   if (gameState.phase === BETTING_ROUNDS.SHOWDOWN) {
-    // 所有玩家亮牌
+    // All players reveal cards
     const updatedPlayers = gameState.players.map(player => ({
       ...player,
       cards: player.cards.map(card => ({ ...card, faceDown: false }))
     }));
 
-    // 评估每位玩家的最佳五张牌
+    // Evaluate each player's best five cards
     const handValues = {}; // id -> {score, name}
     activePlayers.forEach(player => {
       const sevenCards = [...player.cards, ...gameState.communityCards];
@@ -424,25 +508,36 @@ export const determineWinner = (gameState) => {
       handValues[player.id] = best; // { score: number[], name: string }
     });
 
-    // 找到获胜者（按评分逐项比较）
+    // Find winner (compare scores item by item)
     const winnerIdStr = Object.keys(handValues).reduce((bestId, currId) => {
       const a = handValues[bestId].score;
       const b = handValues[currId].score;
-      return compareScores(b, a) > 0 ? currId : bestId; // 返回评分更高者
+      return compareScores(b, a) > 0 ? currId : bestId; // Return the one with higher score
     }, Object.keys(handValues)[0]);
     const winningId = parseInt(winnerIdStr);
 
-    // 更新获胜者的净收益
+    // Update winner's net gain
     const winnerIndex = playerStats.findIndex(p => p.id === winningId);
     if (winnerIndex !== -1) {
       playerStats[winnerIndex].netGain += gameState.pot;
     }
 
+    // Update winner's chips
+    const finalPlayers = updatedPlayers.map(player => {
+      if (player.id === winningId) {
+        return {
+          ...player,
+          chips: player.chips + gameState.pot
+        };
+      }
+      return player;
+    });
+
     return {
       isFinished: true,
       winnerId: winningId,
       reason: 'showdown',
-      gameState: { ...gameState, players: updatedPlayers },
+      gameState: { ...gameState, players: finalPlayers },
       showdown: true,
       activePlayers: activePlayers,
       handValues,
@@ -460,7 +555,7 @@ export const determineWinner = (gameState) => {
     };
   }
 
-  // 情况3：需要继续到下一轮
+  // Case 3: Need to continue to next round
   return {
     isFinished: false,
     winnerId: null,
@@ -470,9 +565,9 @@ export const determineWinner = (gameState) => {
   };
 };
 
-// ===== 德州手牌评估辅助函数 =====
+// ===== Texas Hold'em Hand Evaluation Helper Functions =====
 
-// 将牌点字符转成数值
+// Convert rank character to numeric value
 const rankToValue = (rank) => {
   if (rank === 'A') return 14;
   if (rank === 'K') return 13;
@@ -481,7 +576,7 @@ const rankToValue = (rank) => {
   return parseInt(rank, 10);
 };
 
-// 组合工具：从数组中选取k个元素的所有组合
+// Combination utility: get all combinations of k elements from array
 const combinations = (arr, k) => {
   const result = [];
   const helper = (start, combo) => {
@@ -499,7 +594,7 @@ const combinations = (arr, k) => {
   return result;
 };
 
-// 比较评分：返回正数表示a>b，负数表示a<b，0表示相等
+// Compare scores: returns positive if a>b, negative if a<b, 0 if equal
 const compareScores = (a, b) => {
   const len = Math.max(a.length, b.length);
   for (let i = 0; i < len; i++) {
@@ -510,23 +605,23 @@ const compareScores = (a, b) => {
   return 0;
 };
 
-// 评估5张牌，返回 { score: [...], name: string }
-// 评分结构：
-// [类别, 主值1, 主值2, kicker1, kicker2, kicker3]
-// 类别：8=Straight Flush, 7=Four of a Kind, 6=Full House, 5=Flush, 4=Straight, 3=Three of a Kind, 2=Two Pair, 1=One Pair, 0=High Card
+// Evaluate 5 cards, returns { score: [...], name: string }
+// Score structure:
+// [category, main_value1, main_value2, kicker1, kicker2, kicker3]
+// Category: 8=Straight Flush, 7=Four of a Kind, 6=Full House, 5=Flush, 4=Straight, 3=Three of a Kind, 2=Two Pair, 1=One Pair, 0=High Card
 const evaluateFive = (cards5) => {
   const values = cards5.map(c => rankToValue(c.rank)).sort((a,b) => b - a);
   const suits = cards5.map(c => c.suit);
 
-  // 处理A当作1用于顺子判断
+  // Handle A as 1 for straight detection
   const uniqueDesc = [...new Set(values)].sort((a,b) => b - a);
   const isWheel = uniqueDesc.includes(14) && uniqueDesc.includes(5) && uniqueDesc.includes(4) && uniqueDesc.includes(3) && uniqueDesc.includes(2);
   const straightHigh = (() => {
-    // 常规顺子
+    // Regular straight
     if (uniqueDesc.length >= 5) {
-      // 因为只有5张，uniqueDesc要么5要么更少（有重复）
+      // With only 5 cards, uniqueDesc is either 5 or less (with duplicates)
       const arr = uniqueDesc;
-      // 检查从最大到最小是否连五个
+      // Check if five consecutive from max to min
       if (arr.length === 5 && arr[0] - arr[4] === 4) return arr[0];
     }
     // A2345
@@ -539,7 +634,7 @@ const evaluateFive = (cards5) => {
 
   const countByValue = values.reduce((m, v) => (m[v] = (m[v]||0)+1, m), {});
   const groups = Object.entries(countByValue).map(([v,c]) => ({ v: parseInt(v,10), c }));
-  // 先按数量降序，再按点数降序
+  // Sort by count descending, then by value descending
   groups.sort((a,b) => b.c - a.c || b.v - a.v);
 
   // Straight Flush
@@ -595,9 +690,9 @@ const evaluateFive = (cards5) => {
   return { score: [0, ...values], name: 'High Card' };
 };
 
-// 从7张牌中选最佳5张
+// Select best 5 cards from 7 cards
 const evaluateBestHandFromSeven = (cards7) => {
-  // 选取所有5张组合
+  // Get all 5-card combinations
   const all5 = combinations(cards7, 5);
   let best = null;
   for (const hand of all5) {

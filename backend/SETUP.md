@@ -2,12 +2,13 @@
 
 ```bash
 # change to gpu node
-srun --partition=ice-gpu --gres=gpu:H100:1 --mem=40G --time=01:00:00 --pty bash 
+srun --partition=ice-gpu --gres=gpu:1 --mem=40G --time=01:00:00 --pty bash
 
 module load anaconda3
 conda activate cs6220 
 
 # run uvicorn in the background
+cd backend
 nohup uvicorn aiService:app --host 0.0.0.0 --port 8000 > fastapi.log 2>&1 &
 
 # test
@@ -29,5 +30,6 @@ Connect Frontend with Backend
 # This command creates an SSH tunnel that maps your local port 8001 to
 # port 8000 on the remote GPU node (e.g. atl1-1-03-013-3-0) through the ICE login node.
 ssh -L 8001:atl1-1-03-012-18-0:8000 mjin93@login-ice.pace.gatech.edu
+cd frontend
 npm run dev
 ```
