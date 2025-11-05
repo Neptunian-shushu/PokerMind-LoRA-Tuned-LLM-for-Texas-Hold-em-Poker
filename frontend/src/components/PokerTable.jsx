@@ -8,7 +8,8 @@ const PokerTable = ({
   communityCards, 
   pot, 
   currentPlayerIndex, 
-  phase = BETTING_ROUNDS.PREFLOP 
+  phase = BETTING_ROUNDS.PREFLOP,
+  lastWinnerId = null
 }) => {
   return (
     <div className="poker-table-container">
@@ -61,8 +62,10 @@ const PokerTable = ({
               position={player.position}
               bet={player.bet}
               action={player.action}
+              lastAction={player.lastAction}
               isDealer={player.isDealer}
               isFolded={player.isFolded}
+              isWinner={lastWinnerId !== null && player.id === lastWinnerId}
             />
           ))}
         </div>

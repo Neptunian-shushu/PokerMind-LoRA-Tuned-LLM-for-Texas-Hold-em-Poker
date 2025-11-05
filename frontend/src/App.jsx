@@ -13,6 +13,7 @@ function App() {
   const [gameStarted, setGameStarted] = useState(false);
   const [previousDealerPosition, setPreviousDealerPosition] = useState(null);
   const [playerChips, setPlayerChips] = useState([100, 100, 100, 100, 100, 100]); // Store each player's chips
+  const [lastWinnerId, setLastWinnerId] = useState(null); // Store last round winner ID for crown effect
 
   // Save player chips when game ends
   const savePlayerChips = useCallback((finalState) => {
@@ -33,6 +34,8 @@ function App() {
     setMessage('Game started! Waiting for action...');
     // Store dealer position for next game
     setPreviousDealerPosition(newGame.dealerPosition);
+    // Clear winner crown when starting new game
+    setLastWinnerId(null);
   }, [previousDealerPosition, playerChips]);
 
   // process AI player's turn
@@ -72,75 +75,147 @@ function App() {
         if (result.isFinished) {
           // Game ended (all players folded or showdown)
           const updatedState = result.gameState;
-          const winningPlayer = updatedState.players[result.winnerId];
+          
+          // Handle ties (multiple winners)
+          if (result.isTie && result.winnerIds && result.winnerIds.length > 1) {
+            const winners = result.winnerIds.map(id => updatedState.players[id]);
+            const winnerNames = winners.map(w => w.name).join(', ');
+            const potPerWinner = result.summary?.potPerWinner ?? Math.floor(updatedState.pot / result.winnerIds.length);
+            const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+            const yourFinalChips = result.winnerIds.includes(0) ? yourBaseChips + potPerWinner : yourBaseChips;
 
-          // Only display three pieces of info: winner, amount won, your final chips (including gains)
-          const winnerStats = result.playerStats?.find(p => p.id === result.winnerId);
-          const amountWon = winnerStats?.netGain ?? updatedState.pot;
-          const yourBaseChips = updatedState.players[0]?.chips ?? 0;
-          const yourFinalChips = result.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
+            const resultMessage = [
+              `Tie: ${winnerNames}`,
+              `Split: $${potPerWinner} each`,
+            ];
 
-          const resultMessage = [
-            `Winner: ${winningPlayer.name}`,
-            `Won: $${amountWon}`,
-            `Your Chips: $${yourFinalChips}`
-          ];
+            setMessage(resultMessage.join(' | '));
+            setGameOver(true);
+            setIsProcessing(false);
+            savePlayerChips(result.gameState);
+            setLastWinnerId(result.winnerId); // Set primary winner for crown effect
+            return result.gameState;
+          } else {
+            // Single winner
+            const winningPlayer = updatedState.players[result.winnerId];
+            const winnerStats = result.playerStats?.find(p => p.id === result.winnerId);
+            const amountWon = winnerStats?.netGain ?? updatedState.pot;
+            const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+            const yourFinalChips = result.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
 
-          setMessage(resultMessage.join(' | '));
-          setGameOver(true);
-          setIsProcessing(false);
-          savePlayerChips(result.gameState);
-          return result.gameState;
+            const resultMessage = [
+              `Winner: ${winningPlayer.name}`,
+              `Won: $${amountWon}`,
+            ];
+
+            setMessage(resultMessage.join(' | '));
+            setGameOver(true);
+            setIsProcessing(false);
+            savePlayerChips(result.gameState);
+            setLastWinnerId(result.winnerId); // Set winner for crown effect
+            return result.gameState;
+          }
         } else if (newState.phase === BETTING_ROUNDS.SHOWDOWN) {
           // Reached showdown phase - process showdown result
           const result = determineWinner(newState);
           const updatedState = result.gameState;
-          const winningPlayer = updatedState.players[result.winnerId];
+          
+          // Handle ties (multiple winners)
+          if (result.isTie && result.winnerIds && result.winnerIds.length > 1) {
+            const winners = result.winnerIds.map(id => updatedState.players[id]);
+            const winnerNames = winners.map(w => w.name).join(', ');
+            const potPerWinner = result.summary?.potPerWinner ?? Math.floor(updatedState.pot / result.winnerIds.length);
+            const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+            const yourFinalChips = result.winnerIds.includes(0) ? yourBaseChips + potPerWinner : yourBaseChips;
 
-          // Only display three pieces of info: winner, amount won, your final chips (including gains)
-          const winnerStats = result.playerStats?.find(p => p.id === result.winnerId);
-          const amountWon = winnerStats?.netGain ?? updatedState.pot;
-          const yourBaseChips = updatedState.players[0]?.chips ?? 0;
-          const yourFinalChips = result.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
+            const resultMessage = [
+              `Tie: ${winnerNames}`,
+              `Split: $${potPerWinner} each`,
+            
+            ];
 
-          const resultMessage = [
-            `Winner: ${winningPlayer.name}`,
-            `Won: $${amountWon}`,
-            `Your Chips: $${yourFinalChips}`
-          ];
+            setMessage(resultMessage.join(' | '));
+            setGameOver(true);
+            setIsProcessing(false);
+            savePlayerChips(result.gameState);
+            setLastWinnerId(result.winnerId); // Set primary winner for crown effect
+            return result.gameState;
+          } else {
+            // Single winner
+            const winningPlayer = updatedState.players[result.winnerId];
+            const winnerStats = result.playerStats?.find(p => p.id === result.winnerId);
+            const amountWon = winnerStats?.netGain ?? updatedState.pot;
+            const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+            const yourFinalChips = result.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
 
-          setMessage(resultMessage.join(' | '));
-          setGameOver(true);
-          setIsProcessing(false);
-          savePlayerChips(result.gameState);
-          return result.gameState;
+            const resultMessage = [
+              `Winner: ${winningPlayer.name}`,
+              `Won: $${amountWon}`,
+            
+            ];
+
+            setMessage(resultMessage.join(' | '));
+            setGameOver(true);
+            setIsProcessing(false);
+            savePlayerChips(result.gameState);
+            setLastWinnerId(result.winnerId); // Set winner for crown effect
+            return result.gameState;
+          }
         } else {
           // Advance to next betting round
           console.log(`=== ${newState.phase} Complete - Moving to Next Round ===`);
+          
+          // Add delay before showing "Moving to" message to let AI action message show
+          await new Promise(resolve => setTimeout(resolve, 800));
+          
           newState = advanceToNextRound(newState);
 
           // If advancing leads to showdown, settle immediately without waiting for extra "Check"
           if (newState.phase === BETTING_ROUNDS.SHOWDOWN) {
             const sdResult = determineWinner(newState);
             const updatedState = sdResult.gameState;
-            const winningPlayer = updatedState.players[sdResult.winnerId];
+            
+            // Handle ties (multiple winners)
+            if (sdResult.isTie && sdResult.winnerIds && sdResult.winnerIds.length > 1) {
+              const winners = sdResult.winnerIds.map(id => updatedState.players[id]);
+              const winnerNames = winners.map(w => w.name).join(', ');
+              const potPerWinner = sdResult.summary?.potPerWinner ?? Math.floor(updatedState.pot / sdResult.winnerIds.length);
+              const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+              const yourFinalChips = sdResult.winnerIds.includes(0) ? yourBaseChips + potPerWinner : yourBaseChips;
 
-            const winnerStats = sdResult.playerStats?.find(p => p.id === sdResult.winnerId);
-            const amountWon = winnerStats?.netGain ?? updatedState.pot;
-            const yourBaseChips = updatedState.players[0]?.chips ?? 0;
-            const yourFinalChips = sdResult.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
+              const resultMessage = [
+                `Tie: ${winnerNames}`,
+                `Split: $${potPerWinner} each`,
+                `: $${yourFinalChips}`
+              ];
 
-            const resultMessage = [
-              `Winner: ${winningPlayer.name}`,
-              `Won: $${amountWon}`,
-              `Your Chips: $${yourFinalChips}`
-            ];
+              setMessage(resultMessage.join(' | '));
+              setGameOver(true);
+              setIsProcessing(false);
+              savePlayerChips(sdResult.gameState);
+              setLastWinnerId(sdResult.winnerId); // Set primary winner for crown effect
+              return sdResult.gameState;
+            } else {
+              // Single winner
+              const winningPlayer = updatedState.players[sdResult.winnerId];
+              const winnerStats = sdResult.playerStats?.find(p => p.id === sdResult.winnerId);
+              const amountWon = winnerStats?.netGain ?? updatedState.pot;
+              const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+              const yourFinalChips = sdResult.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
 
-            setMessage(resultMessage.join(' | '));
-            setGameOver(true);
-            setIsProcessing(false);
-            savePlayerChips(sdResult.gameState);
-            return sdResult.gameState;
+              const resultMessage = [
+                `Winner: ${winningPlayer.name}`,
+                `Won: $${amountWon}`,
+              
+              ];
+
+              setMessage(resultMessage.join(' | '));
+              setGameOver(true);
+              setIsProcessing(false);
+              savePlayerChips(sdResult.gameState);
+              setLastWinnerId(sdResult.winnerId); // Set winner for crown effect
+              return sdResult.gameState;
+            }
           }
 
           setMessage(`Moving to ${newState.phase.toUpperCase()}`);
@@ -169,8 +244,8 @@ function App() {
 
     const currentPlayer = gameState.players[gameState.currentPlayerIndex];
     
-    // Update game status display
-    const updateGameStatus = () => {
+    // Only update game status if it's player's turn (not AI's turn to avoid overwriting AI action messages)
+    if (currentPlayer.isHuman || currentPlayer.isFolded) {
       const activePlayers = gameState.players.filter(p => !p.isFolded);
       let statusMessage = '';
 
@@ -190,12 +265,14 @@ function App() {
         case BETTING_ROUNDS.SHOWDOWN:
           statusMessage = `Showdown - Final pot: $${gameState.pot}`;
           break;
+        default:
+          statusMessage = '';
       }
 
-      setMessage(statusMessage);
-    };
-
-    updateGameStatus();
+      if (statusMessage) {
+        setMessage(statusMessage);
+      }
+    }
     
     if (!currentPlayer.isHuman && !currentPlayer.isFolded) {
       // use setTimeout to ensure state is updated before processing
@@ -236,68 +313,19 @@ function App() {
       if (result.isFinished) {
         // Game ended (including fold and showdown cases)
         const updatedState = result.gameState;
-        const winningPlayer = updatedState.players[result.winnerId];
-
-        const winnerStats = result.playerStats?.find(p => p.id === result.winnerId);
-        const amountWon = winnerStats?.netGain ?? updatedState.pot;
-        const yourBaseChips = updatedState.players[0]?.chips ?? 0;
-        const yourFinalChips = result.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
-
-        const resultMessage = [
-          `Winner: ${winningPlayer.name}`,
-          `Won: $${amountWon}`,
-          `Your Chips: $${yourFinalChips}`
-        ];
-
-        setMessage(resultMessage.join(' | '));
-        setGameOver(true);
-        setGameState(updatedState);
-        setIsProcessing(false);
-        savePlayerChips(updatedState);
-        return;
-      } else if (newState.phase === BETTING_ROUNDS.SHOWDOWN) {
-        // Reached showdown phase - process showdown result (only display three pieces of info)
-        const result = determineWinner(newState);
-        const updatedState = result.gameState;
-        const winningPlayer = updatedState.players[result.winnerId];
-
-        const winnerStats = result.playerStats?.find(p => p.id === result.winnerId);
-        const amountWon = winnerStats?.netGain ?? updatedState.pot;
-        const yourBaseChips = updatedState.players[0]?.chips ?? 0;
-        const yourFinalChips = result.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
-
-        const resultMessage = [
-          `Winner: ${winningPlayer.name}`,
-          `Won: $${amountWon}`,
-          `Your Chips: $${yourFinalChips}`
-        ];
-
-        setMessage(resultMessage.join(' | '));
-        setGameOver(true);
-        setGameState(updatedState);
-        setIsProcessing(false);
-        savePlayerChips(updatedState);
-        return;
-      } else {
-        // Advance to next betting round
-        console.log(`=== ${newState.phase} Complete - Moving to Next Round ===`);
-        newState = advanceToNextRound(newState);
-
-        // If advancing leads to showdown, settle immediately without waiting for extra "Check"
-        if (newState.phase === BETTING_ROUNDS.SHOWDOWN) {
-          const sdResult = determineWinner(newState);
-          const updatedState = sdResult.gameState;
-          const winningPlayer = updatedState.players[sdResult.winnerId];
-
-          const winnerStats = sdResult.playerStats?.find(p => p.id === sdResult.winnerId);
-          const amountWon = winnerStats?.netGain ?? updatedState.pot;
+        
+        // Handle ties (multiple winners)
+        if (result.isTie && result.winnerIds && result.winnerIds.length > 1) {
+          const winners = result.winnerIds.map(id => updatedState.players[id]);
+          const winnerNames = winners.map(w => w.name).join(', ');
+          const potPerWinner = result.summary?.potPerWinner ?? Math.floor(updatedState.pot / result.winnerIds.length);
           const yourBaseChips = updatedState.players[0]?.chips ?? 0;
-          const yourFinalChips = sdResult.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
+          const yourFinalChips = result.winnerIds.includes(0) ? yourBaseChips + potPerWinner : yourBaseChips;
 
           const resultMessage = [
-            `Winner: ${winningPlayer.name}`,
-            `Won: $${amountWon}`,
-            `Your Chips: $${yourFinalChips}`
+            `Tie: ${winnerNames}`,
+            `Split: $${potPerWinner} each`,
+           
           ];
 
           setMessage(resultMessage.join(' | '));
@@ -305,7 +333,135 @@ function App() {
           setGameState(updatedState);
           setIsProcessing(false);
           savePlayerChips(updatedState);
+          setLastWinnerId(result.winnerId); // Set primary winner for crown effect
           return;
+        } else {
+          // Single winner
+          const winningPlayer = updatedState.players[result.winnerId];
+          const winnerStats = result.playerStats?.find(p => p.id === result.winnerId);
+          const amountWon = winnerStats?.netGain ?? updatedState.pot;
+          const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+          const yourFinalChips = result.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
+
+          const resultMessage = [
+            `Winner: ${winningPlayer.name}`,
+            `Won: $${amountWon}`,
+            
+          ];
+
+          setMessage(resultMessage.join(' | '));
+          setGameOver(true);
+          setGameState(updatedState);
+          setIsProcessing(false);
+          savePlayerChips(updatedState);
+          setLastWinnerId(result.winnerId); // Set winner for crown effect
+          return;
+        }
+      } else if (newState.phase === BETTING_ROUNDS.SHOWDOWN) {
+        // Reached showdown phase - process showdown result (only display three pieces of info)
+        const result = determineWinner(newState);
+        const updatedState = result.gameState;
+        
+        // Handle ties (multiple winners)
+        if (result.isTie && result.winnerIds && result.winnerIds.length > 1) {
+          const winners = result.winnerIds.map(id => updatedState.players[id]);
+          const winnerNames = winners.map(w => w.name).join(', ');
+          const potPerWinner = result.summary?.potPerWinner ?? Math.floor(updatedState.pot / result.winnerIds.length);
+          const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+          const yourFinalChips = result.winnerIds.includes(0) ? yourBaseChips + potPerWinner : yourBaseChips;
+
+          const resultMessage = [
+            `Tie: ${winnerNames}`,
+            `Split: $${potPerWinner} each`,
+          
+          ];
+
+          setMessage(resultMessage.join(' | '));
+          setGameOver(true);
+          setGameState(updatedState);
+          setIsProcessing(false);
+          savePlayerChips(updatedState);
+          setLastWinnerId(result.winnerId); // Set primary winner for crown effect
+          return;
+        } else {
+          // Single winner
+          const winningPlayer = updatedState.players[result.winnerId];
+          const winnerStats = result.playerStats?.find(p => p.id === result.winnerId);
+          const amountWon = winnerStats?.netGain ?? updatedState.pot;
+          const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+          const yourFinalChips = result.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
+
+          const resultMessage = [
+            `Winner: ${winningPlayer.name}`,
+            `Won: $${amountWon}`,
+           
+          ];
+
+          setMessage(resultMessage.join(' | '));
+          setGameOver(true);
+          setGameState(updatedState);
+          setIsProcessing(false);
+          savePlayerChips(updatedState);
+          setLastWinnerId(result.winnerId); // Set winner for crown effect
+          return;
+        }
+      } else {
+        // Advance to next betting round
+        console.log(`=== ${newState.phase} Complete - Moving to Next Round ===`);
+        
+        // Add delay to let player action message show before advancing
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        newState = advanceToNextRound(newState);
+
+        // If advancing leads to showdown, settle immediately without waiting for extra "Check"
+        if (newState.phase === BETTING_ROUNDS.SHOWDOWN) {
+          const sdResult = determineWinner(newState);
+          const updatedState = sdResult.gameState;
+          
+          // Handle ties (multiple winners)
+          if (sdResult.isTie && sdResult.winnerIds && sdResult.winnerIds.length > 1) {
+            const winners = sdResult.winnerIds.map(id => updatedState.players[id]);
+            const winnerNames = winners.map(w => w.name).join(', ');
+            const potPerWinner = sdResult.summary?.potPerWinner ?? Math.floor(updatedState.pot / sdResult.winnerIds.length);
+            const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+            const yourFinalChips = sdResult.winnerIds.includes(0) ? yourBaseChips + potPerWinner : yourBaseChips;
+
+            const resultMessage = [
+              `Tie: ${winnerNames}`,
+              `Split: $${potPerWinner} each`,
+            
+            ];
+
+            setMessage(resultMessage.join(' | '));
+            setGameOver(true);
+            setGameState(updatedState);
+            setIsProcessing(false);
+            savePlayerChips(updatedState);
+            setLastWinnerId(sdResult.winnerId); // Set primary winner for crown effect
+            return;
+          } else {
+            // Single winner
+            const winningPlayer = updatedState.players[sdResult.winnerId];
+            const winnerStats = sdResult.playerStats?.find(p => p.id === sdResult.winnerId);
+            const amountWon = winnerStats?.netGain ?? updatedState.pot;
+            const yourBaseChips = updatedState.players[0]?.chips ?? 0;
+            const yourFinalChips = sdResult.winnerId === 0 ? yourBaseChips + updatedState.pot : yourBaseChips;
+
+            const resultMessage = [
+              `Winner: ${winningPlayer.name}`,
+              `Won: $${amountWon}`,
+            
+            ];
+
+            setMessage(resultMessage.join(' | '));
+            setGameOver(true);
+            setGameState(updatedState);
+            setIsProcessing(false);
+            savePlayerChips(updatedState);
+            setLastWinnerId(sdResult.winnerId); // Set winner for crown effect
+            return;
+          }
         }
 
         setMessage(`Moving to ${newState.phase.toUpperCase()}`);
@@ -380,6 +536,7 @@ function App() {
                 pot={gameState.pot}
                 currentPlayerIndex={gameState.currentPlayerIndex}
                 phase={gameState.phase}
+                lastWinnerId={lastWinnerId}
               />
             </div>
 
@@ -400,7 +557,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>Built with React + Vite | Powered by DeepSeek AI</p>
+        <p>CS 6220 Project @ Georgia Tech | Powered by Llama-3-8B</p>
       </footer>
     </div>
   );

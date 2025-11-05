@@ -15,7 +15,7 @@ const ControlPanel = ({
 
   const handleAction = (action) => {
     if (action === 'raise') {
-      const amount = parseInt(raiseAmount);
+      const amount = parseFloat(raiseAmount);
       if (isNaN(amount) || amount < availableActions.minRaise) {
         alert(`Minimum raise is $${availableActions.minRaise}`);
         return;

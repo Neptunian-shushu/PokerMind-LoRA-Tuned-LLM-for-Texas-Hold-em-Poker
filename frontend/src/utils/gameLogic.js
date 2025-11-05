@@ -103,6 +103,7 @@ export const initializeGame = (playerNames, startingChips, smallBlind, bigBlind,
       position: getPositionName(index, playerNames.length),
       bet: initialBet,
       action: initialBet > 0 ? (initialBet === smallBlind ? 'SB' : 'BB') : '',
+      lastAction: '', // Store last round's action for display
       isDealer: index === dealerPosition,
       totalBetThisRound: initialBet
     };
@@ -137,19 +138,31 @@ const getPositionName = (index, totalPlayers) => {
 export const isRoundComplete = (gameState) => {
   const activePlayers = gameState.players.filter(p => !p.isFolded);
   
+  // If only one player remains, round is complete
   if (activePlayers.length === 1) {
     return true;
   }
   
-  const allActed = activePlayers.every(p => p.action !== '' && p.action !== 'SB' && p.action !== 'BB');
+  // Players who can still act (have chips to bet)
+  const playersWithChips = activePlayers.filter(p => p.chips > 0);
   
-  const allBetsEqual = activePlayers.every(p => p.totalBetThisRound === gameState.currentBet);
-  const allBetsSettled = activePlayers.every(p => p.totalBetThisRound === gameState.currentBet || p.chips === 0);
-
-  const allChecked = activePlayers.every(p => p.action === 'Check');
-  const isRiverRound = gameState.phase === BETTING_ROUNDS.RIVER;
+  // If no players have chips left (all all-in), round is complete
+  if (playersWithChips.length === 0) {
+    return true;
+  }
   
-  return (allActed && (allBetsEqual || allBetsSettled)) || (isRiverRound && allChecked);
+  // If only one player has chips and others are all-in, check if they acted
+  if (playersWithChips.length === 1) {
+    return playersWithChips[0].action !== '' && playersWithChips[0].action !== 'SB' && playersWithChips[0].action !== 'BB';
+  }
+  
+  // Check if all players with chips have acted
+  const allActed = playersWithChips.every(p => p.action !== '' && p.action !== 'SB' && p.action !== 'BB');
+  
+  // Check if all bets are settled among players with chips
+  const allBetsSettled = playersWithChips.every(p => p.totalBetThisRound === gameState.currentBet);
+  
+  return allActed && allBetsSettled;
 };
 
 // player action
@@ -223,19 +236,32 @@ export const playerAction = (gameState, action, raiseAmount = 0) => {
       }
       break;
       
+    case 'bet':
     case 'raise':
       {
-        const totalRaise = raiseAmount;
-        const toCall = newState.currentBet - player.totalBetThisRound;
-        const totalCost = toCall + totalRaise;
+        // raiseAmount/betAmount is the target total bet amount (bet/raise to)
+        // e.g., bet 3 or raise 2.5 means "bet/raise to 3/2.5 total"
+        const newTotalBet = raiseAmount;
+        const isBet = action === 'bet';
+        
+        // Validate: bet/raise must be greater than current bet
+        if (newTotalBet <= newState.currentBet) {
+          throw new Error(`${isBet ? 'Bet' : 'Raise'} amount must be greater than current bet of ${newState.currentBet}`);
+        }
+        
+        // Validate: player must have enough chips
+        const totalCost = newTotalBet - player.totalBetThisRound;
+        if (totalCost > player.chips) {
+          throw new Error(`Insufficient chips. Need ${totalCost}, have ${player.chips}`);
+        }
         
         player.chips -= totalCost;
         player.bet = totalCost;
-        player.totalBetThisRound += totalCost;
+        player.totalBetThisRound = newTotalBet;
         newState.pot += totalCost;
-        newState.currentBet = player.totalBetThisRound;
+        newState.currentBet = newTotalBet;
         newState.lastRaiserIndex = newState.currentPlayerIndex;
-        player.action = `Raise ${totalRaise}`;
+        player.action = isBet ? `Bet ${newTotalBet}` : `Raise ${newTotalBet}`;
         
         // reset other players' action status (except for folded players)
         // In preflop, preserve SB/BB actions for players who haven't acted yet
@@ -291,18 +317,28 @@ export const playerAction = (gameState, action, raiseAmount = 0) => {
 // move to next player
 export const moveToNextPlayer = (gameState) => {
   let nextIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
+  let attempts = 0;
+  const maxAttempts = gameState.players.length;
   
-  // skip folded players
-  while (gameState.players[nextIndex].isFolded) {
+  // skip folded players and all-in players (who have no chips left)
+  while ((gameState.players[nextIndex].isFolded || gameState.players[nextIndex].chips === 0) && attempts < maxAttempts) {
     nextIndex = (nextIndex + 1) % gameState.players.length;
+    attempts++;
   }
   
   // create new state with new players array and reset bet display
   const newState = {
     ...gameState,
     currentPlayerIndex: nextIndex,
-    players: gameState.players.map(p => {
+    players: gameState.players.map((p, idx) => {
       const updatedPlayer = { ...p, bet: 0 };
+      
+      // Save action as lastAction for the player who just acted (previous current player)
+      // Only if they're not the next current player and have a non-blind action
+      if (idx === gameState.currentPlayerIndex && p.action && p.action !== 'SB' && p.action !== 'BB') {
+        updatedPlayer.lastAction = p.action;
+      }
+      
       // In preflop, preserve SB/BB actions for players who haven't acted yet
       if (gameState.phase === 'preflop' && (p.action === 'SB' || p.action === 'BB')) {
         // Keep the blind action
@@ -335,6 +371,10 @@ export const getAvailableActions = (gameState) => {
 
   if (toCall === 0) {
     actions.push('check');
+    // When no one has bet, player can bet
+    if (player.chips > 0) {
+      actions.push('bet');
+    }
   } else if (player.chips >= toCall) {
     actions.push('call');
   }
@@ -347,11 +387,16 @@ export const getAvailableActions = (gameState) => {
     actions.push('all-in');
   }
   
+  // minRaise: minimum total bet amount (must be at least currentBet + 1)
+  // maxRaise: maximum total bet amount (currentBet + remaining chips)
+  const minRaise = gameState.currentBet + 1;
+  const maxRaise = gameState.currentBet + player.chips;
+  
   return {
     actions,
     toCall,
-    minRaise: 1,
-    maxRaise: player.chips - toCall
+    minRaise,
+    maxRaise
   };
 };
 
@@ -373,13 +418,21 @@ const getSuitSymbol = (suit) => {
 
 // Advance to next betting round
 export const advanceToNextRound = (gameState) => {
-  // Reset player states
-  const resetPlayers = gameState.players.map(p => ({
-    ...p,
-    bet: 0,
-    totalBetThisRound: 0,
-    action: ''
-  }));
+  // Reset player states, but preserve last action for display (only for active players)
+  const resetPlayers = gameState.players.map(p => {
+    // Save current action as lastAction if player is still active (not folded) and has an action
+    const newLastAction = !p.isFolded && p.action && p.action !== 'SB' && p.action !== 'BB' 
+      ? p.action 
+      : p.lastAction;
+    
+    return {
+      ...p,
+      bet: 0,
+      totalBetThisRound: 0,
+      lastAction: newLastAction,
+      action: '' // Clear current action for new round
+    };
+  });
   
   const newState = { 
     ...gameState,
@@ -428,8 +481,13 @@ export const advanceToNextRound = (gameState) => {
   
   // Set first player to act (starting from position after dealer)
   let nextToAct = (newState.dealerPosition + 1) % newState.players.length;
-  while (newState.players[nextToAct].isFolded) {
+  let attempts = 0;
+  const maxAttempts = newState.players.length;
+  
+  // Skip folded players and all-in players (who have no chips left to act)
+  while ((newState.players[nextToAct].isFolded || newState.players[nextToAct].chips === 0) && attempts < maxAttempts) {
     nextToAct = (nextToAct + 1) % newState.players.length;
+    attempts++;
   }
   newState.currentPlayerIndex = nextToAct;
   
@@ -508,48 +566,74 @@ export const determineWinner = (gameState) => {
       handValues[player.id] = best; // { score: number[], name: string }
     });
 
-    // Find winner (compare scores item by item)
-    const winnerIdStr = Object.keys(handValues).reduce((bestId, currId) => {
-      const a = handValues[bestId].score;
-      const b = handValues[currId].score;
-      return compareScores(b, a) > 0 ? currId : bestId; // Return the one with higher score
-    }, Object.keys(handValues)[0]);
-    const winningId = parseInt(winnerIdStr);
+    // Find all winners (handle ties - multiple players with same best hand)
+    const playerIds = Object.keys(handValues).map(id => parseInt(id));
+    
+    // Find the best score (highest hand value)
+    const bestPlayerId = playerIds.reduce((best, id) => {
+      const score = handValues[id].score;
+      const currentBest = handValues[best].score;
+      return compareScores(score, currentBest) > 0 ? id : best;
+    }, playerIds[0]);
+    
+    const bestScore = handValues[bestPlayerId].score;
+    
+    // Find all players with the best score (ties)
+    const winnerIds = playerIds.filter(id => {
+      return compareScores(handValues[id].score, bestScore) === 0;
+    });
+    
+    // Split pot equally among winners
+    const potPerWinner = Math.floor(gameState.pot / winnerIds.length);
+    const remainder = gameState.pot % winnerIds.length; // Handle remainder chips
 
-    // Update winner's net gain
-    const winnerIndex = playerStats.findIndex(p => p.id === winningId);
-    if (winnerIndex !== -1) {
-      playerStats[winnerIndex].netGain += gameState.pot;
-    }
+    // Update winners' net gain
+    winnerIds.forEach(winningId => {
+      const winnerIndex = playerStats.findIndex(p => p.id === winningId);
+      if (winnerIndex !== -1) {
+        // Each winner gets their share of the pot
+        const winnerShare = potPerWinner + (winnerIds.indexOf(winningId) < remainder ? 1 : 0);
+        playerStats[winnerIndex].netGain += winnerShare;
+      }
+    });
 
-    // Update winner's chips
+    // Update winners' chips (split pot)
     const finalPlayers = updatedPlayers.map(player => {
-      if (player.id === winningId) {
+      if (winnerIds.includes(player.id)) {
+        const winnerShare = potPerWinner + (winnerIds.indexOf(player.id) < remainder ? 1 : 0);
         return {
           ...player,
-          chips: player.chips + gameState.pot
+          chips: player.chips + winnerShare
         };
       }
       return player;
     });
+    
+    // Primary winner ID (for compatibility with existing code)
+    const primaryWinnerId = winnerIds[0];
 
     return {
       isFinished: true,
-      winnerId: winningId,
-      reason: 'showdown',
+      winnerId: primaryWinnerId, // Primary winner for backward compatibility
+      winnerIds: winnerIds, // All winners (for ties)
+      isTie: winnerIds.length > 1,
+      reason: winnerIds.length > 1 ? 'showdown_tie' : 'showdown',
       gameState: { ...gameState, players: finalPlayers },
       showdown: true,
       activePlayers: activePlayers,
       handValues,
       playerStats,
       summary: {
-        winType: 'showdown',
+        winType: winnerIds.length > 1 ? 'showdown_tie' : 'showdown',
         potSize: gameState.pot,
+        potPerWinner: potPerWinner,
+        winnerCount: winnerIds.length,
         handDescriptions: playerStats.map(p => ({
           name: p.name,
           cards: p.handDescription,
           handValue: handValues[p.id] ? handValues[p.id].name : 'N/A',
-          netGain: p.netGain
+          netGain: p.netGain,
+          isWinner: winnerIds.includes(p.id)
         }))
       }
     };

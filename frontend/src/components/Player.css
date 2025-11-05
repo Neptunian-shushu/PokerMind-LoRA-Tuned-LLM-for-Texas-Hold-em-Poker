@@ -104,6 +104,41 @@
   box-shadow: 0 2px 6px rgba(245, 158, 11, 0.5);
 }
 
+.winner-crown {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 24px;
+  animation: crown-bounce 1s ease-in-out infinite, crown-glow 2s ease-in-out infinite;
+  filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.8));
+  z-index: 10;
+}
+
+.player.winner {
+  border-color: #fbbf24;
+  box-shadow: 0 0 30px rgba(251, 191, 36, 0.6);
+  background: rgba(30, 41, 59, 1);
+}
+
+@keyframes crown-bounce {
+  0%, 100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-5px);
+  }
+}
+
+@keyframes crown-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.8));
+  }
+  50% {
+    filter: drop-shadow(0 0 15px rgba(255, 215, 0, 1));
+  }
+}
+
 /* Position-specific styles */
 .player-bottom {
   grid-area: bottom;

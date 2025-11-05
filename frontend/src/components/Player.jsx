@@ -9,12 +9,15 @@ const Player = ({
   position = 'bottom',
   bet = 0,
   action = '',
+  lastAction = '',
   isDealer = false,
-  isFolded = false
+  isFolded = false,
+  isWinner = false
 }) => {
   return (
-    <div className={`player player-${position} ${isActive ? 'active' : ''} ${isFolded ? 'folded' : ''}`}>
+    <div className={`player player-${position} ${isActive ? 'active' : ''} ${isFolded ? 'folded' : ''} ${isWinner ? 'winner' : ''}`}>
       {isDealer && <div className="dealer-button">D</div>}
+      {isWinner && <div className="winner-crown">👑</div>}
       
       <div className="player-info">
         <div className="player-name">{name}</div>
@@ -44,6 +47,9 @@ const Player = ({
 
       {action && (
         <div className="player-action">{action}</div>
+      )}
+      {!action && !isFolded && lastAction && (
+        <div className="player-action">{lastAction}</div>
       )}
     </div>
   );
