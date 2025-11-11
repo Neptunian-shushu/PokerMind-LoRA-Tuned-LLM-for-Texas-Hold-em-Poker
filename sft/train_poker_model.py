@@ -17,6 +17,7 @@ from transformers import (
     DataCollatorForLanguageModeling,
     DataCollatorForSeq2Seq,
     BitsAndBytesConfig,
+    TrainerCallback,
 )
 from peft import (
     LoraConfig,
@@ -34,9 +35,112 @@ from tqdm.auto import tqdm
 import gc
 import sys
 from datetime import datetime
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend for cluster
+import matplotlib.pyplot as plt
 
 # Suppress warnings
 warnings.filterwarnings("ignore")
+
+class LossPlottingCallback(TrainerCallback):
+    """Callback to track and plot training/validation losses in real-time"""
+    
+    def __init__(self, output_dir):
+        self.train_losses = []
+        self.train_steps = []
+        self.eval_losses = []
+        self.eval_steps = []
+        self.output_dir = output_dir
+        
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        """Called when logging occurs"""
+        if logs is not None:
+            if 'loss' in logs:
+                self.train_losses.append(logs['loss'])
+                self.train_steps.append(state.global_step)
+            if 'eval_loss' in logs:
+                self.eval_losses.append(logs['eval_loss'])
+                self.eval_steps.append(state.global_step)
+                
+    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        """Called after evaluation"""
+        if metrics is not None and 'eval_loss' in metrics:
+            # Already captured in on_log, but ensure we have it
+            if not self.eval_steps or self.eval_steps[-1] != state.global_step:
+                self.eval_losses.append(metrics['eval_loss'])
+                self.eval_steps.append(state.global_step)
+            self.plot_losses()
+    
+    def on_train_end(self, args, state, control, **kwargs):
+        """Called at the end of training"""
+        self.plot_losses()
+        self.save_loss_data()
+        
+    def plot_losses(self):
+        """Generate and save loss curve plot"""
+        if not self.train_steps:
+            return
+        
+        # Skip the first 200 steps to avoid initial spike
+        train_steps_filtered = [s for s in self.train_steps if s > 200]
+        train_losses_filtered = [l for s, l in zip(self.train_steps, self.train_losses) if s > 200]
+        eval_steps_filtered = [s for s in self.eval_steps if s > 200]
+        eval_losses_filtered = [l for s, l in zip(self.eval_steps, self.eval_losses) if s > 200]
+        
+        if not train_steps_filtered:
+            return
+        
+        fig, ax = plt.subplots(1, 1, figsize=(14, 7))
+        
+        # Plot raw training loss (starting from step 200)
+        ax.plot(train_steps_filtered, train_losses_filtered, color='cornflowerblue', 
+                linewidth=2.0, label='Training Loss')
+        
+        # Plot validation loss with markers
+        if eval_steps_filtered:
+            ax.plot(eval_steps_filtered, eval_losses_filtered, color='darkorange', 
+                   marker='o', linestyle='-', linewidth=2.5, markersize=8,
+                   markeredgecolor='white', markeredgewidth=1.5, 
+                   label='Validation Loss')
+        
+        ax.set_xlabel('Training Steps', fontsize=13, fontweight='bold')
+        ax.set_ylabel('Loss', fontsize=13, fontweight='bold')
+        ax.set_title('Training and Validation Loss Over Training Steps', 
+                    fontsize=15, fontweight='bold', pad=20)
+        ax.legend(fontsize=11, framealpha=0.9, loc='upper right')
+        ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
+        
+        # Smart y-axis limits (using filtered data)
+        all_losses = train_losses_filtered + eval_losses_filtered
+        if all_losses:
+            sorted_losses = sorted(all_losses)
+            ymin = sorted_losses[0]
+            percentile_95_idx = int(len(sorted_losses) * 0.95)
+            ymax = sorted_losses[percentile_95_idx]
+            
+            if ymax > ymin * 5:
+                ymax = ymin + (ymax - ymin) * 0.4
+            
+            padding = max(0.005, (ymax - ymin) * 0.1)
+            ax.set_ylim(max(0, ymin - padding), ymax + padding)
+        
+        plt.tight_layout()
+        plot_path = os.path.join(self.output_dir, 'training_loss_curve.png')
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+    def save_loss_data(self):
+        """Save loss data to JSON for later analysis"""
+        data = {
+            'train_losses': self.train_losses,
+            'train_steps': self.train_steps,
+            'eval_losses': self.eval_losses,
+            'eval_steps': self.eval_steps
+        }
+        json_path = os.path.join(self.output_dir, 'loss_data.json')
+        with open(json_path, 'w') as f:
+            json.dump(data, f, indent=2)
+        print(f"✓ Loss data saved to: {json_path}")
 
 def main():
     print("="*80)
@@ -210,6 +314,9 @@ def main():
         return_tensors="pt"
     )
     
+    # Initialize loss plotting callback
+    loss_callback = LossPlottingCallback(output_dir=output_dir)
+    
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -217,6 +324,7 @@ def main():
         eval_dataset=val_dataset,
         data_collator=data_collator,
         tokenizer=tokenizer,
+        callbacks=[loss_callback],
     )
     
     print(f"✓ Training config ready - Output: {output_dir}")

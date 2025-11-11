@@ -14,9 +14,7 @@ venv/
 .conda/
 
 # Generic binary ignore
-*.safetensors
 *.pt
-*.bin
 
 # HuggingFace caches
 /home/hice1/bshu30/.cache/huggingface

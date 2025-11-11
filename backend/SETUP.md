@@ -2,7 +2,7 @@
 
 ```bash
 # change to gpu node
-srun --partition=ice-gpu --gres=gpu:1 --mem=40G --time=01:00:00 --pty bash
+srun --partition=ice-gpu --gres=gpu:H100 --mem=40G --time=01:00:00 --pty bash
 
 module load anaconda3
 conda activate cs6220 
