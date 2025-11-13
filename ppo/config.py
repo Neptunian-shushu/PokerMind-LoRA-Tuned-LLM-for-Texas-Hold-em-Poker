@@ -20,18 +20,17 @@ class PPOConfig:
     # Training loop
     num_episodes: int = 10000
     steps_per_episode: int = 50
-    learning_rate: float = 1e-5
+    learning_rate: float = 5e-5
     log_frequency: int = 10
     save_frequency: int = 1000
     save_adapter_every: int = 1000
 
     # Eval
     eval_frequency: int = 500
-    eval_episodes: int = 100
 
     # Poker env
     num_players: int = 2
-    starting_stack: float = 10.0
+    starting_stack: float = 100.0
     small_blind: float = 0.5
     big_blind: float = 1.0
 
@@ -46,8 +45,15 @@ class PPOConfig:
     # Repro
     seed: int = 42
     
-    # RL training
-    max_grad_norm: float = 1.0
+    # PPO-specific hyperparameters
+    clip_epsilon: float = 0.2        # PPO clipping parameter
+    ppo_epochs: int = 4              # Number of epochs to train on collected data
+    gae_lambda: float = 0.95         # GAE lambda for advantage estimation
+    gamma: float = 0.99              # Discount factor for rewards
+    value_coef: float = 0.5          # Value loss coefficient
+    entropy_coef: float = 0.01       # Entropy bonus coefficient
+    max_grad_norm: float = 1.0       # Gradient clipping
+    batch_size: int = 16              # Mini-batch size for PPO updates
 
     def __post_init__(self):
         assert self.num_players >= 2
@@ -67,10 +73,9 @@ DEFAULT_CONFIG = PPOConfig()
 
 # Fast config for testing (smaller episodes, more frequent logging)
 FAST_CONFIG = PPOConfig(
-    num_episodes=100,
+    num_episodes=1000,
     steps_per_episode=20,
-    log_frequency=5,
-    save_frequency=50,
-    eval_frequency=25,
-    eval_episodes=100
+    log_frequency=100,
+    save_frequency=200,
+    eval_frequency=200
 )

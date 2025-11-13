@@ -69,18 +69,20 @@ def extract_action_and_amount(output_text):
             pass
     return action, amount
 
-def eval_pokerbench_accuracy(ctl: SharedLLMController, adapter_name: str, max_samples: int = 1000) -> float:
+def eval_pokerbench_accuracy(ctl: SharedLLMController, adapter_name: str, max_preflop: int = 100, max_postflop: int = 1000) -> dict:
     """
     Evaluate model accuracy using generation (matching SFT evaluation method).
-    Uses TRAIN split with same index ranges as SFT:
-    - Postflop: indices 0-1000
-    - Preflop: indices 10000 onwards
+    PokerBench test split has ~999 preflop and ~10001 postflop samples:
+    - Postflop: indices 0-9999 (we'll use first max_postflop)
+    - Preflop: indices 10000-10998 (we'll use first max_preflop)
+    
+    Returns dict with detailed metrics for logging.
     """
     try:
         from datasets import load_dataset
     except Exception:
         print("[eval] datasets not available; skip.")
-        return -1.0
+        return {"overall_acc": -1.0}
 
     # switch adapter
     ctl.set_adapter(adapter_name)
@@ -88,15 +90,15 @@ def eval_pokerbench_accuracy(ctl: SharedLLMController, adapter_name: str, max_sa
     mdl = ctl.model.eval()
 
     ds = load_dataset("RZ412/PokerBench")
-    # Match SFT evaluation: use TEST split
+    # Use TEST split
     test = ds["test"]
 
-    # Use same index ranges as SFT evaluation
-    # Postflop: first 1000 samples (indices 0-999)
-    postflop_indices = list(range(0, min(1000, len(test))))
-    # Preflop: from index 10000 onwards
+    # Postflop: first max_postflop samples (indices 0 to max_postflop-1)
+    postflop_indices = list(range(0, min(max_postflop, 10000, len(test))))
+    # Preflop: from index 10000 onwards, take first max_preflop
     preflop_start = 10000
-    preflop_indices = list(range(preflop_start, len(test))) if preflop_start < len(test) else []
+    preflop_end = min(preflop_start + max_preflop, len(test))
+    preflop_indices = list(range(preflop_start, preflop_end)) if preflop_start < len(test) else []
     
     # Helper parsers to match SFT behavior
     def _parse_pb_target_to_label(target_text: str):
@@ -108,9 +110,9 @@ def eval_pokerbench_accuracy(ctl: SharedLLMController, adapter_name: str, max_sa
         a, _ = extract_action_and_amount(gen_text)
         return a
 
-    # Evaluate both categories separately (max_samples each)
+    # Evaluate both categories separately
     def eval_subset(indices, name):
-        n = min(max_samples, len(indices))
+        n = len(indices)
         action_correct = 0
         exact_match_correct = 0
         device = next(mdl.parameters()).device
@@ -169,18 +171,33 @@ def eval_pokerbench_accuracy(ctl: SharedLLMController, adapter_name: str, max_sa
         acc = (action_correct / n) * 100.0 if n > 0 else -1.0
         exact_pct = (exact_match_correct / n) * 100.0 if n > 0 else 0.0
         print(f"[eval] {name} action-accuracy: {acc:.2f}% ({action_correct}/{n} samples), exact-match: {exact_pct:.2f}% ({exact_match_correct}/{n})")
-        return acc, n
+        return acc, exact_pct, action_correct, exact_match_correct, n
     
-    preflop_acc, preflop_n = eval_subset(preflop_indices, "Preflop")
-    postflop_acc, postflop_n = eval_subset(postflop_indices, "Postflop")
+    preflop_acc, preflop_exact, preflop_correct, preflop_exact_correct, preflop_n = eval_subset(preflop_indices, "Preflop")
+    postflop_acc, postflop_exact, postflop_correct, postflop_exact_correct, postflop_n = eval_subset(postflop_indices, "Postflop")
     
-    # Overall accuracy (weighted average)
-    total_correct = int(preflop_acc * preflop_n / 100.0) + int(postflop_acc * postflop_n / 100.0)
+    # Overall accuracy
+    total_correct = preflop_correct + postflop_correct
     total_n = preflop_n + postflop_n
     overall_acc = (total_correct / total_n) * 100.0 if total_n > 0 else -1.0
     print(f"[eval] Overall accuracy: {overall_acc:.2f}% ({total_correct}/{total_n} samples)")
     
-    return overall_acc
+    # Return detailed metrics as dict for logging
+    return {
+        "overall_acc": overall_acc,
+        "overall_correct": total_correct,
+        "overall_total": total_n,
+        "preflop_action_acc": preflop_acc,
+        "preflop_action_correct": preflop_correct,
+        "preflop_exact_match": preflop_exact,
+        "preflop_exact_correct": preflop_exact_correct,
+        "preflop_total": preflop_n,
+        "postflop_action_acc": postflop_acc,
+        "postflop_action_correct": postflop_correct,
+        "postflop_exact_match": postflop_exact,
+        "postflop_exact_correct": postflop_exact_correct,
+        "postflop_total": postflop_n,
+    }
 
 # ---- main loop ----
 def main(cfg: PPOConfig = DEFAULT_CONFIG):
@@ -197,7 +214,11 @@ def main(cfg: PPOConfig = DEFAULT_CONFIG):
     try:
         name0 = cfg.seat_adapter_names[0]
         print("[eval] Baseline (episode 0) PokerBench accuracy:")
-        _ = eval_pokerbench_accuracy(ctl, name0, max_samples=min(1000, getattr(cfg, "eval_episodes", 100)))
+        eval_results = eval_pokerbench_accuracy(ctl, name0, max_preflop=100, max_postflop=1000)
+        # Log baseline results
+        eval_log_path = os.path.join(cfg.log_dir, "eval_log.jsonl")
+        with open(eval_log_path, "a") as wf:
+            wf.write(json.dumps({"episode": 0, "adapter": name0, **eval_results, "time": time.time()}) + "\n")
     except Exception as e:
         print(f"[eval] Baseline eval skipped due to error: {e}")
 
@@ -232,11 +253,11 @@ def main(cfg: PPOConfig = DEFAULT_CONFIG):
         if cfg.eval_frequency and (ep % cfg.eval_frequency == 0):
             # use first seat's adapter for eval
             name = cfg.seat_adapter_names[0]
-            acc = eval_pokerbench_accuracy(ctl, name, max_samples=min(1000, getattr(cfg, "eval_episodes", 100)))
-            # append a tiny eval log
+            eval_results = eval_pokerbench_accuracy(ctl, name, max_preflop=100, max_postflop=1000)
+            # append detailed eval log
             eval_log_path = os.path.join(cfg.log_dir, "eval_log.jsonl")
             with open(eval_log_path, "a") as wf:
-                wf.write(json.dumps({"episode": ep, "adapter": name, "pokerbench_action_acc": acc, "time": time.time()}) + "\n")
+                wf.write(json.dumps({"episode": ep, "adapter": name, **eval_results, "time": time.time()}) + "\n")
 
     dt = time.time() - t0
     print(f"Done. Episodes={cfg.num_episodes}, elapsed={dt:.1f}s")

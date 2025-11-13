@@ -17,14 +17,14 @@
     "rl_adapter_save_dir": "/home/hice1/yli3776/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker/ppo/rl_adapters/",
     "num_episodes": 1000,
     "steps_per_episode": 20,
-    "learning_rate": 1e-05,
-    "log_frequency": 5,
-    "save_frequency": 50,
+    "learning_rate": 5e-06,
+    "log_frequency": 50,
+    "save_frequency": 100,
     "save_adapter_every": 1000,
-    "eval_frequency": 50,
+    "eval_frequency": 100,
     "eval_episodes": 100,
     "num_players": 2,
-    "starting_stack": 10.0,
+    "starting_stack": 100.0,
     "small_blind": 0.5,
     "big_blind": 1.0,
     "max_seq_len": 512,
@@ -34,17 +34,24 @@
     "device_map": "auto",
     "torch_dtype": "float16",
     "seed": 42,
-    "max_grad_norm": 1.0
+    "clip_epsilon": 0.2,
+    "ppo_epochs": 4,
+    "gae_lambda": 0.95,
+    "gamma": 0.99,
+    "value_coef": 0.5,
+    "entropy_coef": 0.01,
+    "max_grad_norm": 1.0,
+    "batch_size": 16
   },
   "last_log": {
     "steps": 1,
     "stacks_init": [
-      10.0,
-      10.0
+      100.0,
+      100.0
     ],
     "stacks_final": [
-      11.0,
-      9.0
+      101.0,
+      99.0
     ],
     "result": {
       "winners": [
@@ -75,6 +82,9 @@
     "terminal_rewards": [
       1.0,
       -1.0
-    ]
+    ],
+    "policy_loss": -0.029016153421252966,
+    "value_loss": 0.0,
+    "entropy": 0.0
   }
 }

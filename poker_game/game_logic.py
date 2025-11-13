@@ -123,6 +123,8 @@ class PokerGame:
         self.state.min_raise = self.big_blind
         self.state.betting_round = BettingRound.PREFLOP
         self.state.action_history = []
+        self.state.last_aggressor_idx = -1  # Will be set to BB in _post_blinds()
+        self.state.num_actions_this_round = 0
         
         # Move button for next hand
         self.state.hand_number += 1
@@ -172,6 +174,9 @@ class PokerGame:
         self.state.add_to_pot(bb_amount)
         self.state.current_bet = bb_amount
         self.state.record_action(bb_player.player_id, Action.BET, bb_amount, is_blind=True)
+        # BB blind does NOT count as aggressor - BB must act again if action returns to them
+        # Aggressor is only set on voluntary bets/raises, not blind posts
+        self.state.last_aggressor_idx = -1
     
     def _deal_hole_cards(self):
         """Deal 2 cards to each active player"""
@@ -205,12 +210,16 @@ class PokerGame:
         # Record action
         self.state.record_action(current_player.player_id, action, amount)
         
-        # Move to next player
-        self.state.next_player()
+        # Increment action counter for this betting round
+        self.state.num_actions_this_round += 1
         
-        # Check if betting round is complete
+        # Check if betting round is complete BEFORE moving to next player
+        # This prevents advancing the street and then incorrectly moving to next player
         if self.state.is_betting_round_complete():
             return self._advance_betting_round()
+        
+        # Move to next player only if round continues
+        self.state.next_player()
         
         return self.state, False, None
     
@@ -235,6 +244,8 @@ class PokerGame:
             self.state.add_to_pot(actual_amount)
             self.state.current_bet = player.current_bet
             self.state.min_raise = amount
+            # Mark this player as the aggressor
+            self.state.last_aggressor_idx = player.player_id
         
         elif action == Action.RAISE:
             total_bet_needed = self.state.current_bet + amount
@@ -247,6 +258,8 @@ class PokerGame:
             self.state.add_to_pot(actual_amount)
             self.state.current_bet = player.current_bet
             self.state.min_raise = amount
+            # Mark this player as the aggressor
+            self.state.last_aggressor_idx = player.player_id
     
     def _advance_betting_round(self, recursion_depth: int = 0) -> Tuple[GameState, bool, Optional[Dict]]:
         """Move to next betting round or showdown"""
@@ -265,6 +278,9 @@ class PokerGame:
         for player in self.players:
             player.reset_current_bet()
         self.state.current_bet = 0.0
+        # Reset aggressor and action counter for new betting round
+        self.state.last_aggressor_idx = -1
+        self.state.num_actions_this_round = 0
         
         # Advance to next street
         if self.state.betting_round == BettingRound.PREFLOP:
@@ -291,10 +307,14 @@ class PokerGame:
                 break
             self.state.next_player()
         
-        # Check if betting round immediately complete (all all-in)
-        if self.state.is_betting_round_complete():
+        # Check if betting round immediately complete (only if ALL players are all-in)
+        # Don't auto-advance if players can still act - they need their turn!
+        players_who_can_act = self.state.get_players_who_can_act()
+        if len(players_who_can_act) == 0:
+            # All players are all-in or folded, auto-advance to showdown
             return self._advance_betting_round(recursion_depth + 1)
         
+        # Otherwise, return control and let players act
         return self.state, False, None
     
     def _deal_flop(self):

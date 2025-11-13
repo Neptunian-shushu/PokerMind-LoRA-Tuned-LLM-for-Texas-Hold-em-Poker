@@ -84,6 +84,8 @@ class GameState:
     big_blind: float = 1.0
     hand_number: int = 0
     starting_stack: float = 100.0  # Starting chip count for all players
+    last_aggressor_idx: int = -1  # Index of last player to bet/raise (-1 if none)
+    num_actions_this_round: int = 0  # Count of actions taken in current betting round
     
     # Action history for this hand
     action_history: List[Dict] = field(default_factory=list)
@@ -132,7 +134,19 @@ class GameState:
             if player.can_act() and player.current_bet < self.current_bet:
                 return False
         
-        return True
+        # If there's been an aggressor (bet/raise), action has come back to them
+        # and everyone has matched, so round is complete
+        if self.last_aggressor_idx >= 0:
+            return True
+        
+        # No aggressor yet (all checks) - need all players to have acted at least once
+        # In heads-up, need at least 2 actions (one from each player)
+        # In multi-way, need at least num_active_players actions
+        num_active = len(active_players)
+        if self.num_actions_this_round >= num_active:
+            return True
+        
+        return False
     
     def get_valid_actions(self, player: PlayerState) -> List[Action]:
         """Get valid actions for a player"""
