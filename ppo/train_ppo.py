@@ -243,11 +243,13 @@ def main(cfg: PPOConfig = DEFAULT_CONFIG):
         save_every = getattr(cfg, "save_adapter_every", 0)
         if save_every and (ep % save_every == 0):
             tag = f"ep{ep:06d}"
+            adapter_name = cfg.seat_adapter_names[0]  # Save the trained adapter (e.g., "A")
             out_dir = os.path.join(getattr(cfg, "rl_adapter_save_dir", os.path.join(cfg.output_dir, "rl_adapters")), tag)
             os.makedirs(out_dir, exist_ok=True)
-            ctl.model.save_pretrained(out_dir)
+            # Save only the specific adapter, not all adapters
+            ctl.model.save_pretrained(out_dir, selected_adapters=[adapter_name])
             ctl.tokenizer.save_pretrained(out_dir)
-            print(f"[save] LoRA adapters saved to {out_dir}")
+            print(f"[save] LoRA adapter '{adapter_name}' saved to {out_dir}")
 
         # eval PokerBench
         if cfg.eval_frequency and (ep % cfg.eval_frequency == 0):

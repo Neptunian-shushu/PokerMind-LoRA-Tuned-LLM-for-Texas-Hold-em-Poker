@@ -20,10 +20,10 @@ class PPOConfig:
     # Training loop
     num_episodes: int = 10000
     steps_per_episode: int = 50
-    learning_rate: float = 5e-5
+    learning_rate: float = 1e-5
     log_frequency: int = 10
     save_frequency: int = 1000
-    save_adapter_every: int = 1000
+    save_adapter_every: int = 500
 
     # Eval
     eval_frequency: int = 500
@@ -75,7 +75,7 @@ DEFAULT_CONFIG = PPOConfig()
 FAST_CONFIG = PPOConfig(
     num_episodes=1000,
     steps_per_episode=20,
-    log_frequency=100,
-    save_frequency=200,
-    eval_frequency=200
+    log_frequency=10000,
+    save_frequency=10000,
+    eval_frequency=500
 )

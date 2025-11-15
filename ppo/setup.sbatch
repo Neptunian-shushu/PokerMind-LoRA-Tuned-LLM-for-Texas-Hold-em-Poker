@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -J poker_ppo         # Job name
 #SBATCH -N1 --gres=gpu:H100:1
-#SBATCH -t 720                    # Duration of the job (Ex: 720 mins = 12 hours)
+#SBATCH -t 960                    # Duration of the job (Ex: 720 mins = 12 hours)
 #SBATCH --mem-per-cpu=10G         # Increased memory for RL training
 #SBATCH -q coc-ice
 #SBATCH -o logs/ppo/Report-%j.out        # Output to ppo logs directory (relative to project root)
