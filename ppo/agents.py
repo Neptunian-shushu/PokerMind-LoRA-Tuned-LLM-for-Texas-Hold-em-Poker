@@ -73,6 +73,7 @@ class SharedLLMController:
     """One base model shared by seats; load/switch multiple LoRA adapters."""
     def __init__(self, base_repo_or_path: str, torch_dtype: str="float16", device_map: str="auto", trust_remote_code: bool=True, use_4bit: bool=True):
         if not _HAS_TRANSFORMERS: raise RuntimeError("transformers/peft not available.")
+        # Initialize tokenizer from base; will be overridden by adapter tokenizer if available
         self.tokenizer = AutoTokenizer.from_pretrained(base_repo_or_path, token=True, trust_remote_code=trust_remote_code)
         if self.tokenizer.pad_token is None: self.tokenizer.pad_token = self.tokenizer.eos_token
         
@@ -114,6 +115,16 @@ class SharedLLMController:
             # Subsequent adapters: load onto existing PeftModel
             self.model.load_adapter(adapter_path, adapter_name=name)
         self.adapters_loaded[name] = adapter_path
+        # IMPORTANT: Reload tokenizer from adapter dir if available to match SFT tokenizer settings
+        try:
+            if os.path.exists(os.path.join(adapter_path, "tokenizer.json")):
+                tok = AutoTokenizer.from_pretrained(adapter_path, token=True, trust_remote_code=True)
+                if tok.pad_token is None:
+                    tok.pad_token = tok.eos_token
+                self.tokenizer = tok
+        except Exception as e:
+            # Non-fatal; keep base tokenizer
+            pass
     def set_adapter(self, name: Optional[str]): self.model.set_adapter(name)
     def device(self): return next(self.model.parameters()).device
 
@@ -170,24 +181,69 @@ class LLMAgent(AgentBase):
                 )
         self.model.eval()
         self._gen_kwargs = dict(do_sample=True, temperature=self.temperature, top_p=self.top_p,
-                                max_new_tokens=8, pad_token_id=self.tokenizer.pad_token_id,
+                                max_new_tokens=50, pad_token_id=self.tokenizer.pad_token_id,
                                 eos_token_id=self.tokenizer.eos_token_id, use_cache=True)
 
     # ---------- prompts & parsing ----------
     @staticmethod
-    def _tail_instruction() -> str:
-        return ("\n\nIMPORTANT:\n"
-                "Reply with exactly ONE token from this set (lowercase, no explanation): {"
-                + ",".join(DISCRETE_ACTIONS) + "}\nOutput:")
+    def _format_prompt(instruction: str) -> str:
+        """Format prompt to match SFT training format: ### Instruction / ### Response"""
+        return f"### Instruction:\n{instruction}\n\n### Response:\n"
 
     @staticmethod
     def _parse_label(text: str) -> Optional[str]:
-        s = text.strip().split()[0].lower() if text.strip() else ""
-        if s in DISCRETE_ACTIONS: return s
-        s = s.replace("bet_1pot","bet_1.00pot").replace("raise_1pot","raise_1.00pot")
-        if s in DISCRETE_ACTIONS: return s
-        m = re.search(r"(fold|check|call|bet_0\.33pot|bet_0\.50pot|bet_1\.00pot|bet_allin|raise_0\.50pot|raise_1\.00pot|raise_allin)", text.lower())
-        return m.group(1) if m else None
+        """
+        Parse free-form model output to discrete action label.
+        Handles outputs like: 'fold', 'call', 'bet 100', 'raise 200', etc.
+        Maps to discrete actions for game execution.
+        """
+        tokens = text.strip().lower().split() if text.strip() else []
+        if not tokens:
+            return None
+        
+        action = tokens[0]
+        
+        # Direct action matches
+        if action in ("fold", "check", "call"):
+            return action
+        
+        # Bet/raise with amount - map to discrete pot-sized actions
+        if action == "bet":
+            # Default to 0.50pot if no amount specified
+            return "bet_0.50pot"
+        
+        if action == "raise":
+            # Default to 1.00pot if no amount specified  
+            return "raise_1.00pot"
+        
+        # Try to match discrete action labels directly
+        if action in DISCRETE_ACTIONS:
+            return action
+        
+        # Fallback: search for any discrete action in text
+        for discrete_action in DISCRETE_ACTIONS:
+            if discrete_action in text.lower():
+                return discrete_action
+        
+        return None
+
+    @staticmethod
+    def _extract_action_and_amount(text: str) -> Tuple[Optional[str], Optional[float]]:
+        """
+        Parse free-form model output into (action, amount) similar to SFT's `extract_action_and_amount`.
+        Returns action (e.g. 'fold','call','bet','raise','check') and numeric amount (float) when present.
+        """
+        tokens = text.strip().lower().split() if text.strip() else []
+        if not tokens:
+            return None, None
+        action = tokens[0]
+        amount = None
+        if action in ("bet", "raise", "call") and len(tokens) > 1:
+            try:
+                amount = float(tokens[1])
+            except (ValueError, IndexError):
+                amount = None
+        return action, amount
 
     # ---------- inference (no grad) ----------
     def _score_candidates(self, prompt: str, candidates: List[str]) -> Tuple[List[float], List[float]]:
@@ -282,39 +338,51 @@ class LLMAgent(AgentBase):
 
     # ---------- act ----------
     def act(self, state: GameState, legal_actions: List[Action], info: Optional[Dict]=None) -> Tuple[Action,float,Dict]:
-        if self._controller is not None: self._controller.set_adapter(self._adapter_name)
-        prompt = state.get_llm_prompt(self.player_id)
-
-        if self.use_scoring:
-            full_prompt = prompt + self._tail_instruction()
-            _, probs = self._score_candidates(full_prompt, DISCRETE_ACTIONS)
-            import torch as _t
-            if self.temperature > 0:
-                idx = int(_t.multinomial(_t.tensor(probs), 1).item())
-            else:
-                idx = int(_t.argmax(_t.tensor(probs)).item())
-            label = DISCRETE_ACTIONS[idx]
-            actor = state.current_player()
-            action, amount = _legalize_label(label, legal_actions, state, actor)
-            return action, float(amount), {"label": label, "probs": probs}
-
-        full_prompt = prompt + self._tail_instruction()
-        inputs = self.tokenizer(full_prompt, return_tensors="pt", truncation=True, max_length=self.max_seq_len, padding=False)
+        """
+        Generate action from game state.
+        Uses generation to match SFT training format.
+        """
+        if self._controller is not None: 
+            self._controller.set_adapter(self._adapter_name)
+        
+        # Get raw game description and wrap in PokerBench format
+        game_description = state.get_llm_prompt(self.player_id)
+        full_prompt = self._format_prompt(game_description)
+        
+        # Use generation (matching SFT evaluation)
+        inputs = self.tokenizer(full_prompt, return_tensors="pt", truncation=True, 
+                               max_length=self.max_seq_len, padding=False, 
+                               return_attention_mask=True)
         device = next(self.model.parameters()).device
         inputs = {k: v.to(device) for k, v in inputs.items()}
+        
         with torch.no_grad():
-            out = self.model.generate(**inputs, do_sample=True, temperature=self.temperature,
-                                      top_p=self.top_p, max_new_tokens=8,
-                                      pad_token_id=self.tokenizer.pad_token_id,
-                                      eos_token_id=self.tokenizer.eos_token_id, use_cache=True)
+            out = self.model.generate(
+                input_ids=inputs['input_ids'],
+                attention_mask=inputs.get('attention_mask'),
+                max_length=inputs['input_ids'].shape[1] + 50,
+                temperature=self.temperature if self.temperature > 0 else 0.1,
+                do_sample=True,
+                top_p=self.top_p,
+                pad_token_id=self.tokenizer.pad_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
+                use_cache=True
+            )
+        
         full = self.tokenizer.decode(out[0], skip_special_tokens=True)
         gen = full[len(full_prompt):].strip()
         label = self._parse_label(gen) or "fold"
+
+        # Also extract numeric amount (if model emitted one) for logging/debugging
+        gen_action, gen_amount = self._extract_action_and_amount(gen)
+
         actor = state.current_player()
         action, amount = _legalize_label(label, legal_actions, state, actor)
-        return action, float(amount), {"label": label, "raw": gen}
+
+        return action, float(amount), {"label": label, "raw": gen, "parsed_action": gen_action, "parsed_amount": gen_amount}
     
     def policy_probs_for_prompt(self, prompt: str):
-        full_prompt = prompt + self._tail_instruction()
+        """Get policy probabilities for a game state prompt"""
+        full_prompt = self._format_prompt(prompt)
         _, probs = self._score_candidates(full_prompt, DISCRETE_ACTIONS)
         return probs
