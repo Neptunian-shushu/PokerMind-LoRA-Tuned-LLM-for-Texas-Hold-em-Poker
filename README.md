@@ -83,7 +83,10 @@ cd frontend/
 # Install dependencies
 npm install
 
-# Set up DeepSeek API key (get from https://platform.deepseek.com/)
+# Set up DeepSeek API key:
+# 1. Visit https://platform.deepseek.com/ and create an account
+# 2. Navigate to API Keys section and generate a new key
+# 3. Export the key as an environment variable
 export DEEPSEEK_API_KEY="your_api_key_here"
 
 # Start the frontend (in one terminal)
@@ -170,7 +173,7 @@ PPO training was completed to further improve the SFT model through self-play. T
 - **Self-Play Games**: 10,000-50,000 episodes
 - **Target**: +15-20% accuracy improvement over SFT baseline
 
-For detailed PPO results, see the evaluation logs (`eval_log.jsonl`) and training output files (e.g., `Report-3585176.out`) in the `logs/ppo/` directory.
+For detailed PPO results, see the evaluation logs (`eval_log.jsonl`) and training output files (format: `Report-<job_id>.out`) in the `logs/ppo/` directory.
 
 ## Hardware & Dependencies
 
