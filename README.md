@@ -1,4 +1,3 @@
-```markdown
 # PokerMind
 LoRA-fine-tuned LLM for Texas Hold'em Poker — CS6220 (Georgia Tech) course project
 
@@ -170,4 +169,3 @@ Contact
 License
 -------
 MIT — see LICENSE file.
-```
