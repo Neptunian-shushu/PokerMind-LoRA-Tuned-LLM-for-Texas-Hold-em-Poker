@@ -1,409 +1,257 @@
-# PokerMind: LoRA-Tuned LLM for Texas Hold'em Poker# PokerMind: LoRA-Tuned LLM for Texas Hold'em Poker
+# PokerMind: LoRA-Tuned LLM for Texas Hold'em Poker
 
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/Neptunian-shushu/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/Neptunian-shushu/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker)](https://github.com/Neptunian-shushu/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker/stargazers)
+[![SFT Status](https://img.shields.io/badge/SFT-Complete-success)](https://github.com/Neptunian-shushu/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker)
+[![PPO Status](https://img.shields.io/badge/PPO-In%20Progress-yellow)](https://github.com/Neptunian-shushu/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker)
 
+**CS6220 Data and Visual Analytics Project - Georgia Institute of Technology**
 
-CS6220 Data and Visual Analytics Project - Georgia Institute of TechnologyThis repository contains the CS6220 (Data and Visual Analytics) project implementing LoRA fine-tuning of large language models for Texas Hold'em poker decision making, enhanced with PPO (Proximal Policy Optimization) self-play reinforcement learning.
+This repository contains the CS6220 course project implementing LoRA fine-tuning of large language models for Texas Hold'em poker decision making, enhanced with PPO (Proximal Policy Optimization) self-play reinforcement learning.
 
+## Project Overview
 
+This project uses a two-phase approach to train AI poker agents:
 
-A two-phase approach to training AI poker agents: **Supervised Fine-Tuning (SFT)** followed by **PPO Self-Play** reinforcement learning.## Project Overview
+1. **Phase 1 - Supervised Fine-Tuning (SFT)**: Fine-tune Meta-Llama-3-8B using LoRA on the PokerBench dataset (110k expert poker decisions)
+   - ✅ **Status**: Complete
+   - **Accuracy**: 35-45% action accuracy achieved
 
+2. **Phase 2 - PPO Self-Play**: Further improve the model through reinforcement learning via self-play against itself
+   - 🚧 **Status**: In Progress
+   - **Target**: 55-65%+ accuracy
 
+The project demonstrates how combining supervised learning with reinforcement learning can create competitive poker-playing AI agents using efficient fine-tuning techniques.
 
----This project uses a two-phase approach to train AI poker agents:
+## Quick Start
 
-1. **Supervised Fine-Tuning (SFT)**: Fine-tune Llama-3-8B using LoRA on the PokerBench dataset (110k expert poker decisions)
+### Prerequisites
 
-## 🎯 Project Overview2. **PPO Self-Play**: Further improve the model through reinforcement learning via self-play against itself
+Ensure you have Python 3.8+ and access to a CUDA-compatible GPU for training.
 
+### Clone the Repository
 
-
-This project fine-tunes Meta-Llama-3-8B on poker decision-making using:The project achieves **35-45% action accuracy** after SFT and targets **55-65%+** accuracy after PPO training.
-
-
-
-1. **Phase 1 - SFT**: Train on 110k expert poker hands from PokerBench dataset## Quick Start
-
-   - ✅ **Complete**: 35-45% action accuracy achieved
-
-   ### Phase 1: Supervised Fine-Tuning (✅ COMPLETE)
-
-2. **Phase 2 - PPO**: Improve through self-play reinforcement learning  ```bash
-
-   - 🚧 **In Progress**: Target 55-65%+ accuracycd sft/
-
-sbatch setup.sbatch  # Run on PACE ICE H100 GPU
-
----```
-
-
-
-## 📁 Project Structure**Results**: 35-45% action accuracy, model saved to `poker-lora-model/`
-
-
-
-```### Phase 2: PPO Self-Play (🚧 IN PROGRESS)
-
-CS6220/```bash
-
-├── sft/                          # Supervised Fine-Tuning (✅ Complete)cd ppo/
-
-│   ├── train_poker_model.py      # SFT training scriptpython train_ppo.py  # After implementation complete
-
-│   └── setup.sbatch               # SLURM job for H100 GPU```
-
-│
-
-├── ppo/                          # PPO Reinforcement Learning (🚧 Framework Ready)### Demo Interface (⏳ PLANNED)
-
-│   ├── config.py                  # PPO hyperparameters```bash
-
-│   ├── rewards.py                 # Reward calculation with GAEcd demo/
-
-│   ├── agents.py                  # Agent wrappers (TODO)python app.py  # Play against trained AI
-
-│   ├── ppo_trainer.py             # PPO algorithm (TODO)```
-
-│   └── train_ppo.py               # Main PPO training loop (TODO)
-
-│## Project Structure
-
-├── poker_game/                   # Texas Hold'em Game Engine (✅ Complete)
-
-│   ├── game_logic.py              # Core poker game```
-
-│   ├── game_state.py              # State representationCS6220/
-
-│   ├── hand_evaluator.py          # Hand ranking├── sft/                          # Supervised Fine-Tuning
-
-│   ├── deck.py                    # Card management│   ├── train_poker_model.py      # SFT training script
-
-│   └── README.md                  # Game engine documentation│   └── setup.sbatch               # SLURM job for H100 GPU
-
-││
-
-├── demo/                         # Interactive Demo (⏳ Planned)├── ppo/                          # PPO Reinforcement Learning
-
-│   └── app.py                     # Gradio web interface│   ├── config.py                  # PPO hyperparameters
-
-││   ├── rewards.py                 # Reward calculation
-
-├── logs/                         # Training logs│   ├── agents.py                  # Agent wrappers (TODO)
-
-│   ├── sft/                       # SFT training outputs│   ├── ppo_trainer.py             # PPO algorithm (TODO)
-
-│   └── ppo/                       # PPO training outputs│   └── train_ppo.py               # Main PPO script (TODO)
-
-││
-
-├── poker-lora-model/             # Trained Models├── poker_game/                   # Reusable Game Engine
-
-│   └── Meta-Llama-3-8B/          # SFT LoRA adapter weights│   ├── game_logic.py              # Core poker game
-
-││   ├── game_state.py              # State representation
-
-└── requirements.txt              # Python dependencies│   ├── hand_evaluator.py          # Hand ranking
-
-```│   └── deck.py                    # Card management
-
-│
-
----├── demo/                         # Interactive Demo (TODO)
-
-│   └── app.py                     # Gradio interface
-
-## 🚀 Quick Start│
-
-├── utils/                        # Shared utilities
-
-### Phase 1: Supervised Fine-Tuning (✅ Complete)│   └── (utility scripts)
-
-│
-
-```bash├── logs/                         # Training logs
-
-cd sft/│   ├── sft/                       # SFT logs
-
-sbatch setup.sbatch  # Run on PACE ICE H100 GPU│   └── ppo/                       # PPO logs
-
-```│
-
-├── models/                       # Model checkpoints
-
-**Results:**└── poker-lora-model/             # Trained SFT model
-
-- Preflop accuracy: 34.7%    └── Meta-Llama-3-8B/          # LoRA adapter weights
-
-- Postflop accuracy: 44.7%
-
-- Model saved to `poker-lora-model/Meta-Llama-3-8B/````
-
-
-
-### Phase 2: PPO Self-Play (🚧 In Progress)See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for detailed documentation.
-
-
-
-```bash## Package Requirements
-
-cd ppo/
-
-python train_ppo.py  # After implementation completeCore dependencies include:
-
-```- **PyTorch, Transformers, PEFT**: ML frameworks and fine-tuning
-
-- **NumPy, Pandas, Matplotlib**: Data analysis and visualization
-
-### Demo Interface (⏳ Planned)- **Jupyter, Datasets, BitsAndBytes**: Development and optimization
-
-
-
-```bashSee `requirements.txt` for complete list and `SETUP.md` for detailed installation guide.
-
-cd demo/
-
-python app.py  # Play against trained AI## Hardware Requirements
-
+```bash
+git clone https://github.com/Neptunian-shushu/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker.git
+cd PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker
 ```
 
-- **Minimum**: 8GB RAM, multi-core CPU
-
----- **Recommended**: 16GB+ RAM, NVIDIA GPU with 8GB+ VRAM
-
-- **Storage**: 20GB+ free space
-
-## 📊 Training Results
-
-## Team Setup
-
-### Supervised Fine-Tuning (SFT) - COMPLETE ✅
-
-For teammates to get started:
-
-**Configuration:**1. Clone this repository
-
-- Dataset: 110,000 poker hands (80k postflop + 30k preflop)2. Follow instructions in `SETUP.md`
-
-- Model: Meta-Llama-3-8B with LoRA (r=16, α=32)3. Install packages from `requirements.txt`
-
-- Training: 3 epochs on H100 80GB GPU4. Open and run `poker_finetuning.ipynb`
-
-- Duration: ~4.6 hours
-
-- Batch size: 128 (16 × 8 accumulation)## Training Results
-
-
-
-**Results:**### Supervised Fine-Tuning (SFT)
-
-- Final loss: **0.2022** (89% improvement from 1.9058)- **Dataset**: 110,000 poker hands (80k postflop + 30k preflop)
-
-- Train-val gap: **0.0006** (no overfitting ✅)- **Training**: 3 epochs on H100 GPU (~4.6 hours)
-
-- **Preflop**: 34.7% action accuracy- **Final Loss**: 0.2022 (89% improvement from 1.9058)
-
-- **Postflop**: 44.7% action accuracy  - **Accuracy**: 
-
-- **Overall**: ~42% exact match accuracy  - Preflop: 34.7%
-
-  - Postflop: 44.7%
-
-**Analysis:** This accuracy is expected for 3 epochs on complex poker decision-making. The model learned fundamental patterns and is ready for PPO enhancement.  - Overall: ~42% exact match
-
-
-
-### PPO Self-Play - PLANNED 🚧**Analysis**: This accuracy is expected and normal for 3 epochs of training on complex poker decision-making. The model has learned fundamental poker patterns and is ready for PPO enhancement.
-
-
-
-**Method:**### PPO Self-Play (Planned)
-
-- Policy optimization with frozen reference model- **Method**: Policy optimization with frozen reference model
-
-- KL divergence constraint (β = 0.1)- **Expected Improvement**: +15-20% accuracy (target 55-65%)
-
-- 10,000-50,000 self-play games- **Training**: 10,000-50,000 self-play games
-
-- **Key Innovation**: KL divergence constraint to prevent policy collapse
-
-**Expected Results:**
-
-- Target accuracy: **55-65%+** (+15-20% improvement)## Key Features
-
-- Better strategic play (aggression, bluffing, adaptation)
-
-- Win rate vs frozen opponent: 60%+✅ **LoRA Fine-Tuning**: Memory-efficient training (only 0.2% params trainable)  
-
-✅ **4-bit Quantization**: Fits 8B model on single GPU  
-
----✅ **Complete Game Engine**: Reusable Texas Hold'em implementation  
-
-✅ **Modular Architecture**: Separate modules for SFT, PPO, game logic, demo  
-
-## 🎮 Poker Game Engine🚧 **PPO Self-Play**: In development  
-
-⏳ **Interactive Demo**: Planned Gradio interface  
-
-Complete Texas Hold'em implementation for PPO training and demo interface.
-
-## Contributing
-
-**Features:**
-
-- ✅ Full game rules (blinds, betting, showdown)This is a course project for CS6220 at Georgia Tech. Team members should coordinate through the established communication channels.
-- ✅ 2-10 player support
-- ✅ Hand evaluation (High Card → Straight Flush)
-- ✅ Action validation (FOLD/CHECK/CALL/BET/RAISE)
-- ✅ State tracking and history
-- ✅ Reusable for training and demo
-
-**Example:**
-```python
-from poker_game import PokerGame, Action
-
-game = PokerGame(num_players=2, starting_stack=200.0)
-state = game.reset()
-
-# Get valid actions and execute
-valid_actions = state.get_valid_actions(state.current_player())
-state, done, result = game.step(Action.RAISE, amount=6.0)
-
-if done:
-    print(f"Winners: Player {result['winners']}")
-```
-
-See [`poker_game/README.md`](poker_game/README.md) for full documentation.
-
----
-
-## 🤖 PPO Framework
-
-### Current Status
-
-**Complete:**
-- ✅ `config.py` - Hyperparameters (γ=0.99, ε=0.2, KL=0.1)
-- ✅ `rewards.py` - Reward calculation with GAE
-
-**TODO:**
-- ⏳ `agents.py` - Model wrappers (policy + reference)
-- ⏳ `ppo_trainer.py` - PPO algorithm implementation
-- ⏳ `train_ppo.py` - Training loop with self-play
-
-### Reward Structure
-
-```python
-Win at showdown:  +1.0 + stack_change
-Win by fold:      +1.0 + stack_change  
-Lose:             -1.0 + stack_change
-Fold penalty:     -0.1 (encourage playing)
-Showdown bonus:   +0.2 (reward good play)
-```
-
-### Configuration
-
-```python
-from ppo.config import PPOConfig, PRODUCTION_CONFIG
-
-# Production settings
-config = PRODUCTION_CONFIG
-# - 50k episodes
-# - Batch size 64
-# - Learning rate 5e-7
-# - KL coefficient 0.1
-```
-
----
-
-## 🔧 Technical Details
-
-### Model Architecture
-- **Base Model**: Meta-Llama-3-8B
-- **Fine-tuning**: LoRA (r=16, alpha=32, dropout=0.1)
-- **Quantization**: 4-bit NF4 with double quantization
-- **Trainable Parameters**: ~17M / 8B (0.2%)
-
-### Training Configuration
-
-**SFT Phase:**
-- Batch size: 128 (16 per device × 8 accumulation)
-- Learning rate: 1e-6 with cosine decay
-- Optimizer: AdamW (weight_decay=0.01)
-- Hardware: NVIDIA H100 80GB HBM3
-
-**PPO Phase:**
-- Episodes: 10,000-50,000 self-play games
-- KL coefficient: 0.1 (stay close to SFT policy)
-- Clip epsilon: 0.2 (standard PPO)
-- Discount factor: 0.99
-- GAE lambda: 0.95
-
----
-
-## 💻 Hardware Requirements
-
-- **SFT Training**: H100 80GB or A100 40GB+
-- **PPO Training**: H100 80GB recommended
-- **Inference**: RTX 3090 24GB or similar
-- **Demo**: Any GPU with 8GB+ VRAM
-
----
-
-## 📦 Dependencies
+### Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-**Core packages:**
-- PyTorch, Transformers, PEFT
-- BitsAndBytes (quantization)
-- Datasets, NumPy, Pandas
-- Accelerate (distributed training)
+**Note**: If using PACE ICE cluster, load the required modules first:
+```bash
+module load anaconda3
+pip install --user -r requirements.txt
+```
 
----
+### Run SFT Training
 
-## 🎯 Next Steps
+The SFT training is designed to run on PACE ICE cluster using SLURM with H100 GPUs:
 
-1. **Implement PPO Components**
-   - [ ] Agent wrappers (`ppo/agents.py`)
-   - [ ] PPO trainer (`ppo/ppo_trainer.py`)
-   - [ ] Training script (`ppo/train_ppo.py`)
+```bash
+cd sft/
+sbatch setup.sbatch  # Submits SLURM job on PACE ICE H100 GPU
+```
 
-2. **Run PPO Training**
-   - [ ] Test with 1k episodes
-   - [ ] Full training with 10k-50k episodes
-   - [ ] Evaluate vs frozen SFT opponent
+Alternatively, run the training script directly:
+```bash
+cd sft/
+python train_poker_model.py
+```
 
-3. **Build Demo Interface**
-   - [ ] Gradio web UI
-   - [ ] Human vs AI matches
-   - [ ] Game state visualization
+**Training Details:**
+- Dataset: 110,000 poker hands (80k postflop + 30k preflop) from [PokerBench](https://huggingface.co/datasets/RZ412/PokerBench)
+- Model: Meta-Llama-3-8B with LoRA (r=16, α=32)
+- Training: 3 epochs on H100 80GB GPU (~4.6 hours)
+- Results: Model saved to `poker-lora-model/Meta-Llama-3-8B/`
 
-4. **Final Evaluation**
-   - [ ] Test on held-out scenarios
-   - [ ] Compare SFT vs PPO performance
-   - [ ] Analyze learned strategies
+### Run PPO Training (In Progress)
 
----
+PPO training components are currently under development:
 
-## 📚 Documentation
+```bash
+cd ppo/
+python train_ppo.py  # Coming soon
+```
 
-- **Main README**: This file - project overview and setup
-- **[poker_game/README.md](poker_game/README.md)**: Game engine API and examples
-- **[logs/sft/](logs/sft/)**: SFT training logs and analysis
+### Run Demo Interface
 
----
+The demo interface allows you to play against the trained AI:
 
-## 🔗 Links
+```bash
+cd backend/
+python aiService.py  # Start backend service
+```
 
-- **Repository**: [github.com/Neptunian-shushu/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker](https://github.com/Neptunian-shushu/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker)
-- **Dataset**: [RZ412/PokerBench](https://huggingface.co/datasets/RZ412/PokerBench)
-- **Base Model**: [meta-llama/Meta-Llama-3-8B](https://huggingface.co/meta-llama/Meta-Llama-3-8B)
-- **Cluster**: PACE ICE (Georgia Tech)
+For frontend interface, see [`frontend/README.md`](frontend/README.md) for setup instructions.
 
----
+## Project Structure
 
-## 📝 Citation
+```
+PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker/
+├── sft/                          # Supervised Fine-Tuning (✅ Complete)
+│   ├── train_poker_model.py      # SFT training script
+│   └── setup.sbatch               # SLURM job for H100 GPU
+│
+├── ppo/                          # PPO Reinforcement Learning (🚧 In Progress)
+│   ├── config.py                  # PPO hyperparameters
+│   ├── rewards.py                 # Reward calculation with GAE
+│   ├── agents.py                  # Agent wrappers (TODO)
+│   ├── ppo_trainer.py             # PPO algorithm (TODO)
+│   └── train_ppo.py               # Main PPO training loop (TODO)
+│
+├── poker_game/                   # Texas Hold'em Game Engine (✅ Complete)
+│   ├── game_logic.py              # Core poker game logic
+│   ├── game_state.py              # Game state representation
+│   ├── hand_evaluator.py          # Hand ranking system
+│   ├── deck.py                    # Card and deck management
+│   └── README.md                  # Game engine documentation
+│
+├── backend/                      # Backend API Service
+│   ├── aiService.py               # AI inference service
+│   └── SETUP.md                   # Backend setup guide
+│
+├── frontend/                     # Web Frontend Interface
+│   └── README.md                  # Frontend setup instructions
+│
+├── logs/                         # Training Logs
+│   ├── sft/                       # SFT training outputs
+│   └── ppo/                       # PPO training outputs
+│
+├── poker-lora-model/             # Trained Model Weights
+│   └── Meta-Llama-3-8B/          # SFT LoRA adapter weights
+│
+└── requirements.txt              # Python dependencies
+```
+
+## Results & Metrics
+
+### Supervised Fine-Tuning (SFT) - Phase 1 ✅
+
+**Configuration:**
+- Dataset: 110,000 poker hands (80k postflop + 30k preflop)
+- Model: Meta-Llama-3-8B with LoRA (r=16, α=32, dropout=0.1)
+- Training: 3 epochs on H100 80GB GPU
+- Duration: ~4.6 hours
+- Batch size: 128 (16 per device × 8 gradient accumulation steps)
+
+**Results:**
+- **Final Loss**: 0.2022 (89% improvement from initial 1.9058)
+- **Train-Val Gap**: 0.0006 (minimal overfitting ✅)
+- **Preflop Accuracy**: 34.7%
+- **Postflop Accuracy**: 44.7%
+- **Overall Accuracy**: ~42% exact match
+
+**Analysis**: This accuracy is expected and normal for 3 epochs of training on complex poker decision-making. The model has learned fundamental poker patterns and is ready for PPO enhancement.
+
+### PPO Self-Play - Phase 2 🚧 (Planned)
+
+**Method:**
+- Policy optimization with frozen reference model
+- KL divergence constraint (β = 0.1) to prevent policy collapse
+- 10,000-50,000 self-play games
+
+**Expected Results:**
+- Target accuracy: **55-65%+** (+15-20% improvement over SFT)
+- Better strategic play (aggression, bluffing, adaptation)
+- Win rate vs frozen SFT opponent: 60%+
+
+## Hardware & Resources
+
+### Recommended Hardware
+
+- **SFT Training**: NVIDIA H100 80GB or A100 40GB+
+- **PPO Training**: NVIDIA H100 80GB (recommended)
+- **Inference/Demo**: NVIDIA RTX 3090 24GB or any GPU with 8GB+ VRAM
+- **Storage**: 20GB+ free space for models and datasets
+
+### Minimum Requirements
+
+- **CPU**: Multi-core processor
+- **RAM**: 16GB+ recommended (8GB minimum)
+- **GPU**: CUDA-compatible GPU with 8GB+ VRAM
+- **Storage**: 20GB+ free space
+
+## Dependencies & Installation
+
+### Core Dependencies
+
+The project uses the following key packages:
+
+- **PyTorch, Transformers, PEFT**: ML frameworks and LoRA fine-tuning
+- **BitsAndBytes**: 4-bit quantization for memory efficiency
+- **Datasets, Accelerate**: Data handling and distributed training
+- **NumPy, Pandas, Matplotlib**: Data processing and visualization
+- **FastAPI, Uvicorn**: Backend API service
+
+### Installation
+
+Install all dependencies from `requirements.txt`:
+
+```bash
+pip install -r requirements.txt
+```
+
+For detailed installation instructions and troubleshooting, see `backend/SETUP.md`.
+
+### PACE ICE Cluster Setup
+
+If using Georgia Tech's PACE ICE cluster:
+
+```bash
+module load anaconda3
+pip install --user -r requirements.txt
+```
+
+**Note**: PyTorch is pre-installed via PACE modules. Ensure CUDA modules are loaded for GPU support.
+
+## What's Next / Roadmap
+
+### Phase 1: Supervised Fine-Tuning
+- [x] Dataset preparation and preprocessing
+- [x] LoRA fine-tuning implementation
+- [x] Training on H100 GPU cluster
+- [x] Model evaluation and metrics
+- [x] Save trained model weights
+
+### Phase 2: PPO Self-Play (🚧 In Progress)
+- [ ] Implement agent wrappers (`ppo/agents.py`)
+- [ ] Implement PPO trainer (`ppo/ppo_trainer.py`)
+- [ ] Implement training loop (`ppo/train_ppo.py`)
+- [ ] Test with 1,000 episodes
+- [ ] Run full training with 10,000-50,000 episodes
+- [ ] Evaluate PPO model vs SFT baseline
+
+### Phase 3: Demo & Evaluation
+- [ ] Complete Gradio web interface
+- [ ] Implement human vs AI gameplay
+- [ ] Add game state visualization
+- [ ] Test on held-out scenarios
+- [ ] Compare SFT vs PPO performance
+- [ ] Analyze learned strategies and behaviors
+
+## Contributing
+
+This is a course project for CS6220 at Georgia Institute of Technology. 
+
+**For Team Members:**
+- Coordinate through established team communication channels
+- Follow the existing code structure and conventions
+- Update documentation when making significant changes
+
+**For External Contributors:**
+- Open an issue to discuss proposed changes
+- Submit pull requests with clear descriptions
+- Follow the project's coding standards
+
+## Citation
+
+If you use this work in your research or projects, please cite:
 
 ```bibtex
 @misc{pokermind2025,
@@ -411,23 +259,29 @@ pip install -r requirements.txt
   title = {PokerMind: LoRA-Tuned LLM for Texas Hold'em with PPO Self-Play},
   year = {2025},
   publisher = {Georgia Institute of Technology},
-  journal = {CS6220 Course Project}
+  journal = {CS6220 Course Project},
+  url = {https://github.com/Neptunian-shushu/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker}
 }
 ```
 
----
+## Contact
 
-## 📧 Contact
-
-- **GitHub Issues**: Open an issue on the repository
+- **GitHub Issues**: [Open an issue](https://github.com/Neptunian-shushu/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker/issues)
 - **Email**: bshu30@gatech.edu
+- **Repository**: [github.com/Neptunian-shushu/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker](https://github.com/Neptunian-shushu/PokerMind-LoRA-Tuned-LLM-for-Texas-Hold-em-Poker)
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details (if available).
+
+## Links & Resources
+
+- **Dataset**: [RZ412/PokerBench on Hugging Face](https://huggingface.co/datasets/RZ412/PokerBench)
+- **Base Model**: [meta-llama/Meta-Llama-3-8B on Hugging Face](https://huggingface.co/meta-llama/Meta-Llama-3-8B)
+- **Training Cluster**: PACE ICE (Georgia Tech)
+- **Game Engine Documentation**: [poker_game/README.md](poker_game/README.md)
+- **Training Logs**: [logs/](logs/)
 
 ---
 
-## 📄 License
-
-MIT License - See LICENSE file for details
-
----
-
-**Status**: Phase 1 (SFT) ✅ | Phase 2 (PPO) 🚧 | Phase 3 (Demo) ⏳
+**Project Status**: Phase 1 (SFT) ✅ Complete | Phase 2 (PPO) 🚧 In Progress | Phase 3 (Demo) ⏳ Planned
