@@ -1,11 +1,6 @@
 # PokerMind
 LoRA-fine-tuned LLM for Texas Hold'em Poker — CS6220 (Georgia Tech) course project
 
-[![Phase 1: SFT](https://img.shields.io/badge/phase-1%20(SFT)-complete-green)](#)
-[![Phase 2: PPO](https://img.shields.io/badge/phase-2%20(PPO)-complete-green)](#)
-[![Demo / Frontend](https://img.shields.io/badge/demo%20(frontend)-complete-green)](#)
-[![License](https://img.shields.io/badge/license-MIT-blue)](#)
-
 Overview
 --------
 PokerMind trains a Texas Hold'em decision model using a two-stage pipeline:
