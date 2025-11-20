@@ -75,6 +75,8 @@ PPO training logs and checkpoints are saved to `logs/ppo/`.
 
 The interactive frontend allows you to play poker against the trained AI agent. See [frontend/README.md](frontend/README.md) for detailed setup instructions.
 
+**Note**: The frontend currently uses DeepSeek API for AI inference. Future versions will integrate the locally trained PokerMind model.
+
 ```bash
 cd frontend/
 
@@ -82,7 +84,6 @@ cd frontend/
 npm install
 
 # Set up DeepSeek API key (get from https://platform.deepseek.com/)
-# The frontend uses DeepSeek API for AI inference
 export DEEPSEEK_API_KEY="your_api_key_here"
 
 # Start the frontend (in one terminal)
@@ -169,7 +170,7 @@ PPO training was completed to further improve the SFT model through self-play. T
 - **Self-Play Games**: 10,000-50,000 episodes
 - **Target**: +15-20% accuracy improvement over SFT baseline
 
-For detailed PPO results, see the evaluation logs (`eval_log.jsonl`) and training output files (`Report-*.out`) in the `logs/ppo/` directory.
+For detailed PPO results, see the evaluation logs (`eval_log.jsonl`) and training output files (e.g., `Report-3585176.out`) in the `logs/ppo/` directory.
 
 ## Hardware & Dependencies
 
